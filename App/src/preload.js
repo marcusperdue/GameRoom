@@ -1,4 +1,12 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
+
+function filePathFor(file) {
+  try {
+    return webUtils.getPathForFile(file);
+  } catch {
+    return "";
+  }
+}
 
 contextBridge.exposeInMainWorld("gameRoom", {
   getState: () => ipcRenderer.invoke("state:get"),
@@ -11,6 +19,7 @@ contextBridge.exposeInMainWorld("gameRoom", {
   saveArtworkUrl: (gameId, imageUrl, source) => ipcRenderer.invoke("artwork:save-url", gameId, imageUrl, source),
   openGoogleImages: (gameId) => ipcRenderer.invoke("artwork:open-google-images", gameId),
   scanLibrary: () => ipcRenderer.invoke("library:scan"),
+  droppedFilePaths: (files) => Array.from(files || []).map(filePathFor).filter(Boolean),
   importGames: (files, systemName) => ipcRenderer.invoke("games:import", files, systemName),
   pickImportGames: (systemName) => ipcRenderer.invoke("games:pick-import", systemName),
   launchGame: (gameId) => ipcRenderer.invoke("game:launch", gameId),

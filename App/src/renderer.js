@@ -1320,9 +1320,9 @@ dropZone.addEventListener("dragleave", () => {
 dropZone.addEventListener("drop", async (event) => {
   event.preventDefault();
   dropZone.classList.remove("dragging");
-  const files = Array.from(event.dataTransfer.files).map((file) => file.path).filter(Boolean);
+  const files = window.gameRoom.droppedFilePaths(event.dataTransfer.files);
   if (!files.length) {
-    showToast("No files found in drop");
+    showToast("No local files found. Drop files from Finder, or use Add Games.");
     return;
   }
 

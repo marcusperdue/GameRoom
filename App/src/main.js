@@ -15,6 +15,9 @@ const controllerProfilesPath = path.join(configDir, "controllers.json");
 const backupsDir = path.join(rootDir, "Backups", "Saves");
 const batoceraRoot = path.join(os.homedir(), "Library", "Mobile Documents", "com~apple~CloudDocs", "Batocera");
 const platformFolder = process.platform === "darwin" ? "macOS" : process.platform === "win32" ? "Windows" : "Linux";
+const appIconPngPath = path.join(__dirname, "assets", "icon.png");
+const appIconIcnsPath = path.join(__dirname, "assets", "icon.icns");
+const appIconIcoPath = path.join(__dirname, "assets", "icon.ico");
 const coverExtensions = ["png", "jpg", "jpeg", "webp", "gif", "avif"];
 const portableFolderDefaults = {
   gameRoot: "Games",
@@ -131,12 +134,17 @@ const systems = {
 };
 
 function createWindow() {
+  if (process.platform === "darwin" && app.dock) {
+    app.dock.setIcon(appIconPngPath);
+  }
+
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 960,
     minHeight: 640,
     title: "GameRoom",
+    icon: platformAppIconPath(),
     backgroundColor: "#101214",
     webPreferences: {
       preload: path.join(__dirname, "preload.js")
@@ -540,6 +548,12 @@ function dedupeControllers(devices) {
     seen.add(key);
     return true;
   });
+}
+
+function platformAppIconPath() {
+  if (process.platform === "win32") return appIconIcoPath;
+  if (process.platform === "darwin") return appIconIcnsPath;
+  return appIconPngPath;
 }
 
 function controllerDedupeName(name) {

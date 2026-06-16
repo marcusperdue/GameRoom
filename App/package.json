@@ -15,15 +15,14 @@
     "dist:linux": "electron-builder --linux AppImage tar.gz",
     "dist:win": "electron-builder --win nsis zip"
   },
-  "dependencies": {
-    "electron": "^33.3.1"
-  },
   "devDependencies": {
+    "electron": "^33.3.1",
     "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "local.gameroom.launcher",
     "productName": "GameRoom",
+    "icon": "src/assets/icon.png",
     "directories": {
       "output": "../Downloads/Updates/builds"
     },
@@ -32,6 +31,7 @@
       "package.json"
     ],
     "mac": {
+      "icon": "src/assets/icon.icns",
       "target": [
         "dmg",
         "zip"
@@ -39,6 +39,7 @@
       "category": "public.app-category.games"
     },
     "linux": {
+      "icon": "src/assets/icon.png",
       "target": [
         "AppImage",
         "tar.gz"
@@ -46,6 +47,7 @@
       "category": "Game"
     },
     "win": {
+      "icon": "src/assets/icon.ico",
       "target": [
         "nsis",
         "zip"

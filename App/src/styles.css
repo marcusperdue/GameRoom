@@ -1983,38 +1983,12 @@ body {
 }
 
 .brand-icon {
-  position: relative;
-  display: grid;
-  place-items: center;
   flex: 0 0 auto;
-  width: 31px;
-  height: 24px;
-  border: 2px solid var(--green);
-  border-radius: 9px 9px 11px 11px;
-  filter: drop-shadow(0 0 16px rgba(46, 230, 129, 0.22));
-}
-
-.brand-icon::before,
-.brand-icon::after {
-  content: "";
-  position: absolute;
-  border-radius: 999px;
-}
-
-.brand-icon::before {
-  left: 6px;
-  width: 8px;
-  height: 2px;
-  background: var(--green);
-  box-shadow: 0 -3px 0 rgba(46, 230, 129, 0.9), 0 3px 0 rgba(46, 230, 129, 0.9);
-}
-
-.brand-icon::after {
-  right: 7px;
-  width: 5px;
-  height: 5px;
-  background: var(--green);
-  box-shadow: 6px 4px 0 rgba(46, 230, 129, 0.9);
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: url("assets/brand-mark.png") center / cover no-repeat;
+  box-shadow: 0 0 22px rgba(46, 230, 129, 0.18);
 }
 
 .brand h1 {

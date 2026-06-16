@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("gameRoom", {
   pickImportGames: (systemName) => ipcRenderer.invoke("games:pick-import", systemName),
   launchGame: (gameId) => ipcRenderer.invoke("game:launch", gameId),
   openEmulator: (systemName) => ipcRenderer.invoke("emulator:open", systemName),
+  openEmulatorDownload: (systemName) => ipcRenderer.invoke("emulator:open-download", systemName),
   snapshotSaves: () => ipcRenderer.invoke("saves:snapshot"),
   importBatoceraBios: () => ipcRenderer.invoke("bios:import-batocera"),
   chooseFolder: (target) => ipcRenderer.invoke("folder:open", target),

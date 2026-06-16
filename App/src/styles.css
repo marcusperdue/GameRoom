@@ -444,6 +444,7 @@ button.is-loading .button-spinner {
 
 .actions button,
 .setup-item button,
+.inline-setup button,
 .hero-play,
 .round-action,
 .primary,
@@ -479,6 +480,8 @@ button.is-loading .button-spinner {
 .actions button:not(:disabled):hover,
 .detail-actions button:not(:disabled):hover,
 .quick-dock button:not(:disabled):hover,
+.inline-setup button:not(:disabled):hover,
+.guide-table button:not(:disabled):hover,
 .artwork-toolbar button:not(:disabled):hover,
 .controller-card button:not(:disabled):hover,
 .controller-empty button:not(:disabled):hover,
@@ -577,6 +580,13 @@ button.is-loading .button-spinner {
   flex: 0 0 auto;
   min-height: 32px;
   padding: 0 10px;
+}
+
+.setup-actions {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 7px;
+  flex: 0 0 auto;
 }
 
 .hero-panel {
@@ -934,6 +944,15 @@ button.is-loading .button-spinner {
   border: 1px solid rgba(244, 199, 93, 0.3);
   border-radius: 9px;
   background: rgba(244, 199, 93, 0.09);
+}
+
+.inline-setup button {
+  justify-self: start;
+  min-height: 34px;
+  margin-top: 4px;
+  padding: 0 12px;
+  border-color: rgba(56, 217, 130, 0.32);
+  color: var(--green);
 }
 
 .primary {
@@ -1707,11 +1726,24 @@ button.is-loading .button-spinner {
 
 .guide-table div {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: center;
   gap: 12px;
   padding: 10px 12px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.035);
+}
+
+.guide-table button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid rgba(56, 217, 130, 0.28);
+  border-radius: 8px;
+  background: rgba(56, 217, 130, 0.1);
+  color: var(--green);
+  cursor: pointer;
+  font-weight: 850;
+  white-space: nowrap;
 }
 
 .guide-note {
@@ -1808,13 +1840,20 @@ button.is-loading .button-spinner {
   }
 
   .guide-steps,
-  .guide-table div,
   .controller-layout,
   .controller-notes,
   .controller-setup-list,
   .artwork-results,
   .manual-artwork {
     grid-template-columns: 1fr;
+  }
+
+  .guide-table div {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-table button {
+    justify-self: start;
   }
 
   .button-grid {

@@ -40,6 +40,7 @@ const systems = {
   GameCube: {
     folder: "GameCube",
     emulator: "Dolphin",
+    downloadUrl: "https://dolphin-emu.org/download/",
     extensions: [".iso", ".rvz", ".gcm", ".gcz"],
     command: {
       darwin: "dolphin-emu",
@@ -52,6 +53,7 @@ const systems = {
   Wii: {
     folder: "Wii",
     emulator: "Dolphin",
+    downloadUrl: "https://dolphin-emu.org/download/",
     extensions: [".iso", ".rvz", ".wbfs", ".wad"],
     command: {
       darwin: "dolphin-emu",
@@ -64,6 +66,7 @@ const systems = {
   PS2: {
     folder: "PS2",
     emulator: "PCSX2",
+    downloadUrl: "https://pcsx2.net/downloads/",
     extensions: [".iso", ".chd", ".cso", ".bin", ".cue"],
     command: {
       darwin: "pcsx2",
@@ -76,6 +79,7 @@ const systems = {
   Xbox: {
     folder: "Xbox",
     emulator: "xemu",
+    downloadUrl: "https://xemu.app/docs/download/",
     extensions: [".iso", ".xiso", ".xbe"],
     command: {
       darwin: "xemu",
@@ -88,6 +92,7 @@ const systems = {
   NintendoDS: {
     folder: "NintendoDS",
     emulator: "melonDS",
+    downloadUrl: "https://melonds.kuribo64.net/downloads.php",
     extensions: [".nds"],
     command: {
       darwin: "melonDS",
@@ -100,6 +105,7 @@ const systems = {
   PS1: {
     folder: "PS1",
     emulator: "DuckStation",
+    downloadUrl: "https://duckstation.org/",
     extensions: [".cue", ".chd", ".pbp", ".bin", ".iso"],
     command: {
       darwin: "duckstation-qt",
@@ -112,6 +118,7 @@ const systems = {
   PSP: {
     folder: "PSP",
     emulator: "PPSSPP",
+    downloadUrl: "https://www.ppsspp.org/download/",
     extensions: [".iso", ".cso", ".pbp"],
     command: {
       darwin: "PPSSPPSDL",
@@ -1335,6 +1342,17 @@ async function openEmulator(systemName) {
   return { system: systemName, emulator: profile.emulator, command };
 }
 
+async function openEmulatorDownload(systemName) {
+  const system = systems[systemName];
+  if (!system?.downloadUrl) throw new Error(`No download page configured for ${systemName}.`);
+  await shell.openExternal(system.downloadUrl);
+  return {
+    system: systemName,
+    emulator: system.emulator,
+    url: system.downloadUrl
+  };
+}
+
 async function snapshotSaves(reason = "manual", game = null) {
   const config = normalizeConfig(await readJson(configPath, createDefaultConfig()));
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -1487,6 +1505,7 @@ ipcMain.handle("artwork:open-google-images", (_event, gameId) => openGoogleImage
 ipcMain.handle("library:scan", scanLibrary);
 ipcMain.handle("game:launch", (_event, gameId) => launchGame(gameId));
 ipcMain.handle("emulator:open", (_event, systemName) => openEmulator(systemName));
+ipcMain.handle("emulator:open-download", (_event, systemName) => openEmulatorDownload(systemName));
 ipcMain.handle("saves:snapshot", () => snapshotSaves("manual"));
 ipcMain.handle("bios:import-batocera", importBatoceraBios);
 ipcMain.handle("games:import", (_event, files, systemName) => importGameFiles(files, systemName));

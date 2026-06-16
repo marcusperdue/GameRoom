@@ -32,6 +32,7 @@ const snapshotButton = document.querySelector("#snapshotButton");
 const guideButton = document.querySelector("#guideButton");
 const guideOverlay = document.querySelector("#guideOverlay");
 const guideCloseButton = document.querySelector("#guideCloseButton");
+const guideTable = document.querySelector("#guideTable");
 const controllerOverlay = document.querySelector("#controllerOverlay");
 const controllerCloseButton = document.querySelector("#controllerCloseButton");
 const controllerRefreshButton = document.querySelector("#controllerRefreshButton");
@@ -64,6 +65,15 @@ const systemMeta = {
   PS1: { label: "PS1", icon: "♟" },
   PSP: { label: "PSP", icon: "▣" }
 };
+
+const guideSystems = [
+  "GameCube",
+  "PS2",
+  "Xbox",
+  "NintendoDS",
+  "PS1",
+  "PSP"
+];
 
 async function boot() {
   [state, controllerState, systemControllerState] = await Promise.all([
@@ -225,7 +235,7 @@ function renderSetup() {
     ? issues.map((item) => `<div class="setup-item">
         <span>!</span>
         <div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(displayPath(item.detail))}</small></div>
-        <button data-folder="${item.label.includes("BIOS") ? "biosRoot" : "emulatorRoot"}" type="button">Open</button>
+        <div class="setup-actions">${renderSetupActions(item)}</div>
       </div>`).join("")
     : `<div class="setup-item ok">
         <span>✓</span>
@@ -233,11 +243,32 @@ function renderSetup() {
       </div>`;
 }
 
+function renderSetupActions(item) {
+  const systemName = systemNameForHealthItem(item);
+  if (item.label.endsWith(" emulator") && systemName && state.systems[systemName]?.downloadUrl) {
+    return `<button data-download-emulator="${escapeAttribute(systemName)}" type="button">Download</button>
+      <button data-folder="emulatorRoot" type="button">Folder</button>`;
+  }
+
+  const folderKey = item.label.includes("BIOS") ? "biosRoot" : "emulatorRoot";
+  return `<button data-folder="${folderKey}" type="button">Open</button>`;
+}
+
 function renderSetupHint(issue) {
+  const systemName = systemNameForHealthItem(issue);
+  const downloadButton = issue.label.endsWith(" emulator") && systemName && state.systems[systemName]?.downloadUrl
+    ? `<button data-download-emulator="${escapeAttribute(systemName)}" type="button">Download ${escapeHtml(state.systems[systemName].emulator)}</button>`
+    : "";
   return `<div class="inline-setup">
     <strong>${escapeHtml(issue.label)}</strong>
     <p>${escapeHtml(displayPath(issue.detail))}</p>
+    ${downloadButton}
   </div>`;
+}
+
+function systemNameForHealthItem(item) {
+  const label = item?.label || "";
+  return Object.keys(state?.systems || {}).find((systemName) => label === `${systemName} emulator` || label === `${systemName} BIOS/files`) || "";
 }
 
 function activeIssues() {
@@ -408,6 +439,24 @@ async function withLoading(buttons, options, task) {
   }
 }
 
+async function openEmulatorDownload(systemName, button = null) {
+  const system = state.systems[systemName];
+  if (!system?.downloadUrl) {
+    showToast("No download page configured for this emulator");
+    return;
+  }
+
+  try {
+    const result = await withLoading(button, {
+      buttonLabel: "Opening",
+      status: `Opening ${system.emulator} download`
+    }, () => window.gameRoom.openEmulatorDownload(systemName));
+    showToast(`Opened ${result.emulator} download page`);
+  } catch (error) {
+    showToast(userErrorMessage(error));
+  }
+}
+
 function userErrorMessage(error) {
   return String(error?.message || error || "Something went wrong").replace(
     /^Error invoking remote method '[^']+': Error: /,
@@ -416,6 +465,7 @@ function userErrorMessage(error) {
 }
 
 function openGuide() {
+  renderGuideTable();
   guideOverlay.classList.add("show");
   guideOverlay.setAttribute("aria-hidden", "false");
 }
@@ -423,6 +473,31 @@ function openGuide() {
 function closeGuide() {
   guideOverlay.classList.remove("show");
   guideOverlay.setAttribute("aria-hidden", "true");
+}
+
+function renderGuideTable() {
+  if (!guideTable) return;
+  guideTable.innerHTML = guideSystems.map((systemName) => {
+    const system = state.systems[systemName];
+    const title = systemName === "GameCube" ? "GameCube / Wii" : labelFor(systemName);
+    return `<div>
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(emulatorSetupNote(systemName))}</span>
+      <button data-download-emulator="${escapeAttribute(systemName)}" type="button">Download ${escapeHtml(system.emulator)}</button>
+    </div>`;
+  }).join("");
+}
+
+function emulatorSetupNote(systemName) {
+  const notes = {
+    GameCube: "Dolphin emulator. No BIOS for most GameCube/Wii games.",
+    PS2: "PCSX2 emulator. Needs PS2 BIOS dumped from your console.",
+    Xbox: "xemu emulator. Needs MCPX boot ROM, BIOS/flash image, and Xbox hard drive image.",
+    NintendoDS: "melonDS emulator. BIOS/firmware is optional for most games.",
+    PS1: "DuckStation emulator. PS1 BIOS is recommended and often required.",
+    PSP: "PPSSPP emulator. No BIOS needed."
+  };
+  return notes[systemName] || `${state.systems[systemName]?.emulator || "Emulator"} download and setup.`;
 }
 
 function gamepadApiAvailable() {
@@ -979,6 +1054,12 @@ shell.addEventListener("click", async (event) => {
     return;
   }
 
+  const emulatorDownloadButton = event.target.closest("[data-download-emulator]");
+  if (emulatorDownloadButton) {
+    await openEmulatorDownload(emulatorDownloadButton.dataset.downloadEmulator, emulatorDownloadButton);
+    return;
+  }
+
   const folderButton = event.target.closest("[data-folder]");
   if (folderButton) {
     const target = state.config[folderButton.dataset.folder];
@@ -1050,8 +1131,16 @@ guideButton.addEventListener("click", openGuide);
 
 guideCloseButton.addEventListener("click", closeGuide);
 
-guideOverlay.addEventListener("click", (event) => {
-  if (event.target === guideOverlay) closeGuide();
+guideOverlay.addEventListener("click", async (event) => {
+  if (event.target === guideOverlay) {
+    closeGuide();
+    return;
+  }
+
+  const emulatorDownloadButton = event.target.closest("[data-download-emulator]");
+  if (emulatorDownloadButton) {
+    await openEmulatorDownload(emulatorDownloadButton.dataset.downloadEmulator, emulatorDownloadButton);
+  }
 });
 
 controllerCloseButton.addEventListener("click", closeControllerCenter);

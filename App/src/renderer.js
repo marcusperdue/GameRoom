@@ -68,12 +68,12 @@ const busyStatus = document.querySelector("#busyStatus");
 
 const systemMeta = {
   All: { label: "All Games", icon: "▦" },
-  GameCube: { label: "GameCube", icon: "◇" },
+  GameCube: { label: "GameCube", icon: "▣" },
   Wii: { label: "Wii", icon: "◌" },
-  PS2: { label: "PS2", icon: "♪" },
+  PS2: { label: "PlayStation 2", icon: "PS2" },
   Xbox: { label: "Xbox", icon: "✕" },
-  NintendoDS: { label: "Nintendo DS", icon: "●" },
-  PS1: { label: "PS1", icon: "♟" },
+  NintendoDS: { label: "Nintendo DS", icon: "DS" },
+  PS1: { label: "PlayStation 1", icon: "PS" },
   PSP: { label: "PSP", icon: "▣" }
 };
 
@@ -143,6 +143,7 @@ async function boot() {
     window.gameRoom.getControllers(),
     window.gameRoom.getSystemControllers()
   ]);
+  selectedSystem = "All";
   selectedGameId = state.library[0]?.id ?? null;
   render();
   startUiControllerNavigation();
@@ -173,8 +174,8 @@ function renderSystems() {
       const meta = systemMeta[system] || { label: system, icon: "•" };
       const count = system === "All" ? state.library.length : counts[system] || 0;
       const issue = system === "All" ? activeIssues()[0] : issueForSystem(system);
-      const status = issue ? "Needs setup" : count ? `${count} game${count === 1 ? "" : "s"}` : "Empty";
-      return `<button class="system-card ${selectedSystem === system ? "active" : ""} ${issue ? "needs" : ""}" data-system="${system}" type="button">
+      const status = issue ? "Setup" : count ? String(count) : "Empty";
+      return `<button class="system-card ${systemClass(system)} ${selectedSystem === system ? "active" : ""} ${issue ? "needs" : ""}" data-system="${system}" type="button">
         <span class="system-icon">${meta.icon}</span>
         <span class="system-name">${escapeHtml(meta.label)}</span>
         <small>${escapeHtml(status)}</small>
@@ -188,9 +189,12 @@ function renderLibrary() {
   const meta = systemMeta[selectedSystem] || { label: selectedSystem };
   systemTitle.textContent = selectedSystem === "All" ? "All Games" : meta.label;
   libraryTitle.textContent = selectedSystem === "All" ? "Recently Added" : meta.label;
+  dropZone.classList.toggle("compact", games.length > 0);
 
   if (games.length && !games.some((game) => game.id === selectedGameId)) {
     selectedGameId = games[0].id;
+  } else if (!games.length) {
+    selectedGameId = null;
   }
 
   gameList.innerHTML = games.length
@@ -205,8 +209,10 @@ function renderLibrary() {
 function renderGameRow(game) {
   const cover = coverUrl(game);
   const issue = issueForSystem(game.system);
-  return `<button class="game-card ${selectedGameId === game.id ? "selected" : ""} ${issue ? "needs" : ""}" data-game-id="${game.id}" type="button">
+  return `<button class="game-card ${systemClass(game.system)} ${selectedGameId === game.id ? "selected" : ""} ${issue ? "needs" : ""}" data-game-id="${game.id}" type="button">
     <div class="poster ${cover ? "has-art" : ""}"${coverStyle(game)}>
+      <strong class="poster-badge">${escapeHtml(labelFor(game.system))}</strong>
+      <i class="poster-menu" aria-hidden="true">•••</i>
       <span>${cover ? "" : coverText(game)}</span>
       ${issue ? "<em>Setup</em>" : ""}
     </div>
@@ -220,12 +226,17 @@ function renderGameRow(game) {
 function renderHero() {
   const game = state.library.find((item) => item.id === selectedGameId);
   if (!game) {
+    const meta = systemMeta[selectedSystem] || { label: selectedSystem };
+    const title = selectedSystem === "All" ? "Add your first game" : `Add ${meta.label} games`;
+    const copy = selectedSystem === "All" ? "Pick a console, add games, then press Play." : `Drop ${meta.label} games here or use Add Games.`;
     heroGame.innerHTML = `<div class="hero-backdrop empty-backdrop"><span>GR</span></div>
-      <div class="hero-copy">
-        <p class="eyebrow">GameRoom</p>
-        <h2>Add your first game</h2>
-        <p>Pick a console, add games, then press Play.</p>
-        <button class="hero-play" id="heroAddButton" type="button"><span class="action-icon plus-icon" aria-hidden="true"></span>Add Games</button>
+      <div class="hero-content">
+        <div class="hero-copy">
+          <p class="eyebrow">${selectedSystem === "All" ? "GameRoom" : escapeHtml(meta.label)}</p>
+          <h2>${escapeHtml(title)}</h2>
+          <p>${escapeHtml(copy)}</p>
+          <button class="hero-play" id="heroAddButton" type="button"><span class="action-icon plus-icon" aria-hidden="true"></span>Add Games</button>
+        </div>
       </div>`;
     return;
   }
@@ -235,13 +246,21 @@ function renderHero() {
   heroGame.innerHTML = `<div class="hero-backdrop ${cover ? "has-art" : ""}"${coverStyle(game)}>
       <span>${coverText(game)}</span>
     </div>
-    <div class="hero-copy">
-      <p class="eyebrow">${labelFor(game.system)}</p>
-      <h2>${escapeHtml(game.title)}</h2>
-      <p>${issue ? "Finish setup before launching this game." : `${escapeHtml(game.emulator || "")} · ${escapeHtml(game.format)} · ${escapeHtml(game.size)}`}</p>
-      <div class="hero-actions">
-        <button class="hero-play ${issue ? "blocked" : ""}" data-play type="button"><span>${issue ? "!" : "▶"}</span>${issue ? "Finish Setup" : "Play"}</button>
-        <button class="round-action" data-folder="gameRoot" type="button">⋯</button>
+    <div class="hero-content">
+      <div class="hero-copy">
+        <p class="hero-tag">${escapeHtml(labelFor(game.system))}</p>
+        <h2>${escapeHtml(game.title)}</h2>
+        <p>${issue ? "Finish setup before launching this game." : `${escapeHtml(game.emulator || "")} · ${escapeHtml(game.format)} · ${escapeHtml(game.size)}`}</p>
+        <div class="hero-actions">
+          <button class="hero-play ${issue ? "blocked" : ""}" data-play type="button"><span>${issue ? "!" : "▶"}</span>${issue ? "Finish Setup" : "Play"}</button>
+          <button class="round-action" data-folder="gameRoot" type="button" aria-label="More game options">•••</button>
+        </div>
+      </div>
+      <div class="hero-stats">
+        <span>${escapeHtml(game.format)}</span>
+        <span>${escapeHtml(game.size)}</span>
+        <span>${escapeHtml(game.emulator || "Emulator")}</span>
+        <i aria-hidden="true"></i>
       </div>
     </div>`;
 }
@@ -249,11 +268,16 @@ function renderHero() {
 function renderSelected() {
   const game = state.library.find((item) => item.id === selectedGameId);
   if (!game) {
+    const meta = systemMeta[selectedSystem] || { label: selectedSystem };
+    const title = selectedSystem === "All" ? "Add your first game" : `Add ${meta.label} games`;
+    const copy = selectedSystem === "All"
+      ? "Drag a game into GameRoom or use Add Games. Pick the console first for ISO files."
+      : `Drop ${meta.label} games here, or use Add Games after picking ${meta.label}.`;
     selectedGame.innerHTML = `<div class="detail-art empty-art"><span>GR</span></div>
       <div class="detail-copy">
         <p class="eyebrow">Ready when you are</p>
-        <h2>Add your first game</h2>
-        <p>Drag a game into GameRoom or use Add Games. Pick the console first for ISO files.</p>
+        <h2>${escapeHtml(title)}</h2>
+        <p>${escapeHtml(copy)}</p>
         <button class="primary" id="focusAddButton" type="button">Add Games</button>
       </div>`;
     return;
@@ -266,7 +290,10 @@ function renderSelected() {
       <span>${coverText(game)}</span>
     </div>
     <div class="detail-copy">
-      <p class="eyebrow">${labelFor(game.system)}</p>
+      <div class="detail-head">
+        <p class="eyebrow">${labelFor(game.system)}</p>
+        <button type="button" data-artwork-center aria-label="Change artwork">♡</button>
+      </div>
       <h2>${escapeHtml(game.title)}</h2>
       <div class="meta">
         <span>${escapeHtml(game.format)}</span>
@@ -276,10 +303,10 @@ function renderSelected() {
       ${issue ? renderSetupHint(issue) : `<p class="path">${escapeHtml(displayPath(game.path))}</p>`}
       <button id="playButton" class="primary ${issue ? "blocked" : ""}" data-play type="button"><span>${issue ? "!" : "▶"}</span>${issue ? "Finish Setup" : "Play Game"}</button>
       <div class="detail-actions">
-        <button data-folder="gameRoot" type="button"><span>▣</span>Open Game Folder</button>
-        <button data-folder="saveRoot" type="button"><span>☁</span>Manage Saves</button>
-        <button data-controller-center type="button"><span>◉</span>Controllers</button>
-        <button data-artwork-center type="button"><span>▧</span>Artwork</button>
+        <button data-folder="gameRoot" type="button"><span>▣</span><strong>Open Game Folder</strong><i>›</i></button>
+        <button data-folder="saveRoot" type="button"><span>☆</span><strong>Manage Saves</strong><i>›</i></button>
+        <button data-controller-center type="button"><span>◉</span><strong>Controllers</strong><i>›</i></button>
+        <button data-artwork-center type="button"><span>▧</span><strong>Artwork</strong><i>›</i></button>
       </div>
     </div>`;
 }
@@ -368,6 +395,10 @@ function countBySystem() {
 
 function labelFor(system) {
   return systemMeta[system]?.label || system;
+}
+
+function systemClass(system) {
+  return `system-${String(system || "unknown").replace(/[^a-z0-9]/gi, "").toLowerCase()}`;
 }
 
 function coverText(game) {
@@ -1795,6 +1826,13 @@ function controllerSectionElement(section) {
   return null;
 }
 
+function selectSystem(system) {
+  selectedSystem = system;
+  const games = visibleGames();
+  selectedGameId = games[0]?.id ?? state.library[0]?.id ?? null;
+  render();
+}
+
 function currentImportSystem() {
   return selectedSystem === "All" ? "" : selectedSystem;
 }
@@ -1802,10 +1840,8 @@ function currentImportSystem() {
 systemNav.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-system]");
   if (!button) return;
-  selectedSystem = button.dataset.system;
-  const games = visibleGames();
-  selectedGameId = games[0]?.id ?? state.library[0]?.id ?? null;
-  render();
+  event.stopPropagation();
+  selectSystem(button.dataset.system);
 });
 
 gameList.addEventListener("click", (event) => {
@@ -1822,6 +1858,12 @@ gameList.addEventListener("click", (event) => {
 });
 
 shell.addEventListener("click", async (event) => {
+  const systemButton = event.target.closest("button[data-system]");
+  if (systemButton) {
+    selectSystem(systemButton.dataset.system);
+    return;
+  }
+
   const focusAdd = event.target.closest("#focusAddButton");
   if (focusAdd) {
     importButton.click();
@@ -2096,6 +2138,12 @@ document.addEventListener("click", playButtonUiSound, true);
 window.addEventListener("keydown", (event) => {
   if (handleControllerKeyboardNavigation(event)) return;
   document.body.classList.remove("controller-nav-active");
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    searchInput.focus();
+    searchInput.select();
+    return;
+  }
   if (event.key === "Escape") {
     closeGuide();
     closeControllerCenter();

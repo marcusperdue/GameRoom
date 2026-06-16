@@ -12,6 +12,7 @@
         <div class="window-dots" aria-hidden="true"><span></span><span></span><span></span></div>
 
         <div class="brand">
+          <span class="brand-icon" aria-hidden="true"></span>
           <div>
             <h1>GameRoom</h1>
             <p id="storageText">Console launcher</p>
@@ -21,6 +22,7 @@
         <label class="search-box">
           <span>⌕</span>
           <input id="searchInput" type="search" placeholder="Search games" />
+          <kbd>⌘K</kbd>
         </label>
 
         <p class="side-label">Consoles</p>
@@ -64,9 +66,10 @@
         <section class="library-panel">
           <div class="library-head">
             <div>
-              <p class="eyebrow">Library</p>
+              <p class="eyebrow">Recently Added</p>
               <h3 id="libraryTitle">Recently Added</h3>
             </div>
+            <button class="view-all" type="button" data-system="All">View all</button>
           </div>
 
           <section class="drop-zone" id="dropZone">

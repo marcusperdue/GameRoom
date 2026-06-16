@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GameRoom</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="sidebar">
+        <div class="window-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+
+        <div class="brand">
+          <div class="brand-mark">GR</div>
+          <div>
+            <h1>GameRoom</h1>
+            <p id="storageText">Console launcher</p>
+          </div>
+        </div>
+
+        <label class="search-box">
+          <span>⌕</span>
+          <input id="searchInput" type="search" placeholder="Search games" />
+        </label>
+
+        <p class="side-label">Consoles</p>
+        <nav class="system-nav" id="systemNav" aria-label="Systems"></nav>
+
+        <section class="quick-dock">
+          <button data-folder="gameRoot" type="button"><span>▣</span>Games</button>
+          <button data-folder="saveRoot" type="button"><span>☁</span>Saves</button>
+          <button data-controller-center type="button"><span>◉</span>Controllers</button>
+          <button data-artwork-center type="button"><span>▧</span>Artwork</button>
+          <button data-folder="biosRoot" type="button"><span>⚙</span>BIOS</button>
+          <button id="importBiosButton" type="button"><span>↥</span>Import BIOS</button>
+        </section>
+      </aside>
+
+      <section class="stage">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Continue Playing</p>
+            <h2 id="systemTitle">All Games</h2>
+          </div>
+          <div class="actions">
+            <button id="importButton" class="primary-action" type="button"><span>+</span>Add Games</button>
+            <button id="scanButton" type="button"><span>⌕</span>Scan Library</button>
+            <button id="snapshotButton" type="button"><span>☁</span>Backup Saves</button>
+            <button id="guideButton" type="button"><span>?</span>Guide</button>
+          </div>
+        </header>
+
+        <section class="setup-banner" id="setupBanner">
+          <div class="setup-copy">
+            <span id="healthBadge">Checking</span>
+            <h2 id="setupTitle">Checking setup</h2>
+            <p id="setupSummary">GameRoom is checking your folders, emulators, and required user files.</p>
+          </div>
+          <div id="healthList" class="setup-list"></div>
+        </section>
+
+        <section class="hero-panel" id="heroGame"></section>
+
+        <section class="library-panel">
+          <div class="library-head">
+            <div>
+              <p class="eyebrow">Library</p>
+              <h3 id="libraryTitle">Recently Added</h3>
+            </div>
+          </div>
+
+          <section class="drop-zone" id="dropZone">
+            <span>▱</span>
+            <div>
+              <strong>Drop games here</strong>
+              <p>GameRoom copies them to the selected console.</p>
+            </div>
+          </section>
+
+          <div id="gameList" class="game-shelf"></div>
+        </section>
+      </section>
+
+      <aside class="detail-rail">
+        <div id="selectedGame" class="selected-game"></div>
+      </aside>
+
+      <div class="hidden-compat">
+        <span id="rootPath"></span>
+        <div id="setupGrid"></div>
+        <div id="pathList"></div>
+      </div>
+    </main>
+
+    <div class="toast" id="toast"></div>
+    <section class="guide-overlay" id="guideOverlay" aria-hidden="true">
+      <div class="guide-sheet" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+        <header>
+          <div>
+            <p class="eyebrow">Quick setup</p>
+            <h2 id="guideTitle">Get playing in three steps</h2>
+          </div>
+          <button id="guideCloseButton" type="button" aria-label="Close guide">×</button>
+        </header>
+
+        <div class="guide-steps">
+          <section>
+            <span>1</span>
+            <strong>Add games</strong>
+            <p>Use Add Games or drag files in. For ISO files, pick the console first.</p>
+          </section>
+          <section>
+            <span>2</span>
+            <strong>Fix yellow setup items</strong>
+            <p>Open the shown folder and add the required files from your own hardware.</p>
+          </section>
+          <section>
+            <span>3</span>
+            <strong>Press Play</strong>
+            <p>GameRoom launches the right emulator and backs up saves first.</p>
+          </section>
+        </div>
+
+        <div class="guide-table">
+          <div><strong>GameCube / Wii</strong><span>Dolphin emulator. No BIOS for most games.</span></div>
+          <div><strong>PS2</strong><span>PCSX2 emulator. Needs PS2 BIOS dumped from your console.</span></div>
+          <div><strong>Xbox</strong><span>xemu emulator. Needs MCPX boot ROM, BIOS/flash image, and Xbox hard drive image.</span></div>
+          <div><strong>Nintendo DS</strong><span>melonDS emulator. BIOS/firmware is optional for most games.</span></div>
+          <div><strong>PS1</strong><span>DuckStation emulator. PS1 BIOS is recommended and often required.</span></div>
+          <div><strong>PSP</strong><span>PPSSPP emulator. No BIOS needed.</span></div>
+        </div>
+
+        <p class="guide-note">GameRoom can use emulator apps you download or install. It does not include games or BIOS files. Use your own legally dumped games and console files.</p>
+      </div>
+    </section>
+
+    <section class="controller-overlay" id="controllerOverlay" aria-hidden="true">
+      <div class="controller-sheet" role="dialog" aria-modal="true" aria-labelledby="controllerTitle">
+        <header>
+          <div>
+            <p class="eyebrow">Controller Center</p>
+            <h2 id="controllerTitle">Plug in, press a button, play</h2>
+          </div>
+          <button id="controllerCloseButton" type="button" aria-label="Close controller setup">×</button>
+        </header>
+
+        <section class="controller-summary" id="controllerSummary"></section>
+
+        <div class="controller-layout">
+          <section class="controller-panel">
+            <div class="panel-head">
+              <div>
+                <strong>Detected controllers</strong>
+                <p>USB or Bluetooth controllers appear here after the OS sees them.</p>
+              </div>
+              <button id="controllerRefreshButton" type="button">Refresh</button>
+            </div>
+            <div id="controllerList" class="controller-list"></div>
+          </section>
+
+          <section class="controller-panel">
+            <div class="panel-head">
+              <div>
+                <strong>Live input test</strong>
+                <p>Move sticks and press buttons to confirm it is working.</p>
+              </div>
+            </div>
+            <div id="controllerTest" class="controller-test"></div>
+          </section>
+        </div>
+
+        <section class="controller-notes">
+          <div>
+            <strong>1. Connect</strong>
+            <span>USB works immediately. For Bluetooth, pair in macOS, Windows, or Linux first.</span>
+          </div>
+          <div>
+            <strong>2. Press any button</strong>
+            <span>Some systems do not expose a controller until a button is pressed.</span>
+          </div>
+          <div>
+            <strong>3. Emulator mapping</strong>
+            <span>Dolphin, PCSX2, xemu, DuckStation, melonDS, and PPSSPP keep their own final mappings.</span>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="artwork-overlay" id="artworkOverlay" aria-hidden="true">
+      <div class="artwork-sheet" role="dialog" aria-modal="true" aria-labelledby="artworkTitle">
+        <header>
+          <div>
+            <p class="eyebrow">Artwork Center</p>
+            <h2 id="artworkTitle">Find a cover for this game</h2>
+          </div>
+          <button id="artworkCloseButton" type="button" aria-label="Close artwork setup">×</button>
+        </header>
+
+        <section class="artwork-selected" id="artworkSelected"></section>
+
+        <div class="artwork-toolbar">
+          <button id="archiveSearchButton" type="button"><span>⌕</span>Search Internet Archive</button>
+          <button id="googleImagesButton" type="button"><span>↗</span>Open Google Images</button>
+          <button data-folder="coverRoot" type="button"><span>▧</span>Open Covers Folder</button>
+        </div>
+
+        <section class="manual-artwork">
+          <label>
+            <span>Image URL</span>
+            <input id="artworkUrlInput" type="url" placeholder="Paste an image URL from Google Images or another source" />
+          </label>
+          <button id="artworkUrlSaveButton" type="button">Save URL</button>
+        </section>
+
+        <div id="artworkResults" class="artwork-results"></div>
+
+        <p class="guide-note">GameRoom saves a local copy into Covers and records the source in Metadata. Use artwork you have rights to use.</p>
+      </div>
+    </section>
+    <script src="renderer.js"></script>
+  </body>
+</html>

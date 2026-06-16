@@ -13,6 +13,11 @@ let operationCounter = 0;
 const activeOperations = new Map();
 let mappingSession = null;
 let mappingPollTimer = null;
+let uiControllerTimer = null;
+let lastUiControllerInput = null;
+let lastUiControllerAction = "";
+let lastUiControllerActionAt = 0;
+let controllerNavSection = "library";
 
 const systemNav = document.querySelector("#systemNav");
 const gameList = document.querySelector("#gameList");
@@ -102,6 +107,12 @@ const mappingSteps = [
   { path: "axes.rightY", label: "Right Stick Up", hint: "Move the right stick up.", type: "axis" }
 ];
 
+const uiNavSelector = [
+  "button:not(:disabled)",
+  "input:not(:disabled)",
+  "[tabindex]:not([tabindex='-1'])"
+].join(",");
+
 async function boot() {
   [state, controllerState, systemControllerState] = await Promise.all([
     window.gameRoom.getState(),
@@ -110,6 +121,7 @@ async function boot() {
   ]);
   selectedGameId = state.library[0]?.id ?? null;
   render();
+  startUiControllerNavigation();
 }
 
 function render() {
@@ -1401,6 +1413,303 @@ function renderInputTest(gamepad) {
   <div class="axis-grid">${axes || "<p>No analog axes reported.</p>"}</div>`;
 }
 
+function startUiControllerNavigation() {
+  if (uiControllerTimer) return;
+  const tick = () => {
+    pollUiControllerNavigation();
+    uiControllerTimer = window.requestAnimationFrame(tick);
+  };
+  uiControllerTimer = window.requestAnimationFrame(tick);
+}
+
+function pollUiControllerNavigation() {
+  if (!gamepadApiAvailable() || mappingSession?.active) {
+    lastUiControllerInput = null;
+    lastUiControllerAction = "";
+    return;
+  }
+
+  const gamepad = connectedGamepads()[0];
+  if (!gamepad) {
+    lastUiControllerInput = null;
+    lastUiControllerAction = "";
+    return;
+  }
+
+  const input = readUiControllerInput(gamepad);
+  const action = uiControllerAction(input);
+  const now = performance.now();
+  const repeatMs = action?.startsWith("move:") || action === "section:prev" || action === "section:next" ? 175 : 340;
+  const isNewAction = action && action !== lastUiControllerAction;
+  const canRepeat = action && action === lastUiControllerAction && now - lastUiControllerActionAt > repeatMs;
+  const isPressed = Boolean(action);
+
+  if (isPressed && (isNewAction || canRepeat)) {
+    document.body.classList.add("controller-nav-active");
+    handleUiControllerAction(action);
+    lastUiControllerAction = action;
+    lastUiControllerActionAt = now;
+  }
+
+  if (!isPressed) {
+    lastUiControllerAction = "";
+  }
+
+  lastUiControllerInput = input;
+}
+
+function readUiControllerInput(gamepad) {
+  const button = (index) => Boolean(gamepad.buttons[index]?.pressed || Number(gamepad.buttons[index]?.value || 0) > 0.55);
+  const axis = (index) => Number(gamepad.axes[index] || 0);
+  const x = Math.abs(axis(0)) > 0.55 ? axis(0) : 0;
+  const y = Math.abs(axis(1)) > 0.55 ? axis(1) : 0;
+
+  return {
+    select: button(0),
+    back: button(1),
+    play: button(9),
+    prevSection: button(4),
+    nextSection: button(5),
+    left: button(14) || x < -0.55,
+    right: button(15) || x > 0.55,
+    up: button(12) || y < -0.55,
+    down: button(13) || y > 0.55
+  };
+}
+
+function uiControllerAction(input) {
+  if (!input) return "";
+  if (input.select && !lastUiControllerInput?.select) return "select";
+  if (input.back && !lastUiControllerInput?.back) return "back";
+  if (input.play && !lastUiControllerInput?.play) return "play";
+  if (input.prevSection) return "section:prev";
+  if (input.nextSection) return "section:next";
+  if (input.up) return "move:up";
+  if (input.down) return "move:down";
+  if (input.left) return "move:left";
+  if (input.right) return "move:right";
+  return "";
+}
+
+function handleUiControllerAction(action) {
+  if (action.startsWith("move:")) {
+    moveControllerFocus(action.replace("move:", ""));
+    return;
+  }
+
+  if (action === "select") {
+    activateControllerFocus();
+    return;
+  }
+
+  if (action === "back") {
+    closeControllerNavLayer();
+    return;
+  }
+
+  if (action === "play") {
+    activatePlayAction();
+    return;
+  }
+
+  if (action === "section:prev") {
+    focusControllerSection(-1);
+    return;
+  }
+
+  if (action === "section:next") {
+    focusControllerSection(1);
+  }
+}
+
+function handleControllerKeyboardNavigation(event) {
+  if (mappingSession?.active || isTextEditingTarget(event.target)) return false;
+
+  const keyActions = {
+    ArrowUp: "move:up",
+    ArrowDown: "move:down",
+    ArrowLeft: "move:left",
+    ArrowRight: "move:right",
+    Enter: "select",
+    " ": "select"
+  };
+  const action = keyActions[event.key];
+  if (!action) return false;
+
+  event.preventDefault();
+  document.body.classList.add("controller-nav-active");
+  handleUiControllerAction(action);
+  return true;
+}
+
+function isTextEditingTarget(target) {
+  if (!(target instanceof Element)) return false;
+  return target.matches("input, textarea, select, [contenteditable='true']");
+}
+
+function moveControllerFocus(direction) {
+  const scope = controllerNavScope();
+  const focusables = controllerFocusableElements(scope);
+  if (!focusables.length) return;
+
+  const active = focusables.includes(document.activeElement) ? document.activeElement : controllerDefaultFocus(scope, focusables);
+  if (!active) {
+    focusControllerElement(focusables[0]);
+    return;
+  }
+
+  const next = nearestControllerElement(active, focusables, direction);
+  focusControllerElement(next || active);
+}
+
+function controllerNavScope() {
+  if (controllerOverlay.classList.contains("show")) return controllerOverlay;
+  if (artworkOverlay.classList.contains("show")) return artworkOverlay;
+  if (guideOverlay.classList.contains("show")) return guideOverlay;
+  return shell;
+}
+
+function controllerFocusableElements(scope = shell) {
+  return Array.from(scope.querySelectorAll(uiNavSelector))
+    .filter((element) => !element.disabled)
+    .filter((element) => element.tabIndex !== -1)
+    .filter(isControllerVisibleElement);
+}
+
+function isControllerVisibleElement(element) {
+  const rect = element.getBoundingClientRect();
+  const style = window.getComputedStyle(element);
+  return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+}
+
+function controllerDefaultFocus(scope, focusables) {
+  if (scope !== shell) return focusables[0] || null;
+  const selectedCard = gameList.querySelector(`[data-game-id="${CSS.escape(selectedGameId || "")}"]`);
+  if (selectedCard && focusables.includes(selectedCard)) return selectedCard;
+  return focusables.find((element) => element.matches("[data-play]")) || focusables[0] || null;
+}
+
+function nearestControllerElement(active, focusables, direction) {
+  const source = centerOf(active.getBoundingClientRect());
+  let best = null;
+
+  for (const element of focusables) {
+    if (element === active) continue;
+    const target = centerOf(element.getBoundingClientRect());
+    const dx = target.x - source.x;
+    const dy = target.y - source.y;
+    const primary = direction === "left" ? -dx : direction === "right" ? dx : direction === "up" ? -dy : dy;
+    if (primary <= 4) continue;
+
+    const secondary = direction === "left" || direction === "right" ? Math.abs(dy) : Math.abs(dx);
+    const distance = Math.hypot(dx, dy);
+    const score = primary * 1.2 + secondary * 2.6 + distance * 0.08;
+    if (!best || score < best.score) best = { element, score };
+  }
+
+  return best?.element || null;
+}
+
+function centerOf(rect) {
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2
+  };
+}
+
+function focusControllerElement(element) {
+  if (!element) return;
+  element.focus({ preventScroll: true });
+  element.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+function activateControllerFocus() {
+  const scope = controllerNavScope();
+  const focusables = controllerFocusableElements(scope);
+  let active = focusables.includes(document.activeElement) ? document.activeElement : controllerDefaultFocus(scope, focusables);
+  if (!active) return;
+  focusControllerElement(active);
+  if (active.matches("input")) return;
+  active.click();
+}
+
+function closeControllerNavLayer() {
+  if (document.activeElement?.matches("input")) {
+    document.activeElement.blur();
+    return;
+  }
+
+  if (artworkOverlay.classList.contains("show")) {
+    closeArtworkCenter();
+    focusControllerElement(selectedGame.querySelector("[data-artwork-center]") || gameList.querySelector(`[data-game-id="${CSS.escape(selectedGameId || "")}"]`));
+    return;
+  }
+
+  if (controllerOverlay.classList.contains("show")) {
+    closeControllerCenter();
+    focusControllerElement(selectedGame.querySelector("[data-controller-center]") || gameList.querySelector(`[data-game-id="${CSS.escape(selectedGameId || "")}"]`));
+    return;
+  }
+
+  if (guideOverlay.classList.contains("show")) {
+    closeGuide();
+    focusControllerElement(guideButton);
+    return;
+  }
+
+  if (selectedSystem !== "All") {
+    selectedSystem = "All";
+    render();
+    focusControllerElement(systemNav.querySelector("[data-system='All']"));
+    return;
+  }
+
+  focusControllerElement(gameList.querySelector(`[data-game-id="${CSS.escape(selectedGameId || "")}"]`) || importButton);
+}
+
+function activatePlayAction() {
+  if (controllerNavScope() !== shell) {
+    activateControllerFocus();
+    return;
+  }
+
+  const playButton = selectedGame.querySelector("[data-play]") || heroGame.querySelector("[data-play]");
+  if (playButton && !playButton.disabled) {
+    focusControllerElement(playButton);
+    playButton.click();
+  }
+}
+
+function focusControllerSection(direction) {
+  if (controllerNavScope() !== shell) {
+    moveControllerFocus(direction < 0 ? "left" : "right");
+    return;
+  }
+
+  const sections = ["systems", "library", "details", "actions"];
+  const index = Math.max(0, sections.indexOf(controllerNavSection));
+  controllerNavSection = sections[(index + direction + sections.length) % sections.length];
+
+  const target = controllerSectionElement(controllerNavSection);
+  if (target) focusControllerElement(target);
+}
+
+function controllerSectionElement(section) {
+  if (section === "systems") {
+    return systemNav.querySelector(`[data-system="${CSS.escape(selectedSystem)}"]`) || systemNav.querySelector("button");
+  }
+  if (section === "library") {
+    return gameList.querySelector(`[data-game-id="${CSS.escape(selectedGameId || "")}"]`) || gameList.querySelector("button");
+  }
+  if (section === "details") {
+    return selectedGame.querySelector("[data-play]") || selectedGame.querySelector("button");
+  }
+  if (section === "actions") {
+    return importButton;
+  }
+  return null;
+}
+
 function currentImportSystem() {
   return selectedSystem === "All" ? "" : selectedSystem;
 }
@@ -1698,11 +2007,17 @@ artworkOverlay.addEventListener("click", (event) => {
 });
 
 window.addEventListener("keydown", (event) => {
+  if (handleControllerKeyboardNavigation(event)) return;
+  document.body.classList.remove("controller-nav-active");
   if (event.key === "Escape") {
     closeGuide();
     closeControllerCenter();
     closeArtworkCenter();
   }
+});
+
+window.addEventListener("pointerdown", () => {
+  document.body.classList.remove("controller-nav-active");
 });
 
 window.addEventListener("gamepadconnected", async (event) => {

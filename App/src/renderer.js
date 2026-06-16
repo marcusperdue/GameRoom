@@ -18,6 +18,8 @@ let lastUiControllerInput = null;
 let lastUiControllerAction = "";
 let lastUiControllerActionAt = 0;
 let controllerNavSection = "library";
+let uiAudioContext = null;
+const uiSoundLastPlayed = {};
 
 const systemNav = document.querySelector("#systemNav");
 const gameList = document.querySelector("#gameList");
@@ -112,6 +114,28 @@ const uiNavSelector = [
   "input:not(:disabled)",
   "[tabindex]:not([tabindex='-1'])"
 ].join(",");
+
+const uiSoundConfig = {
+  nav: {
+    cooldown: 48,
+    tones: [{ frequency: 430, endFrequency: 560, duration: 0.045, gain: 0.018, type: "triangle" }]
+  },
+  scroll: {
+    cooldown: 85,
+    tones: [{ frequency: 260, endFrequency: 330, duration: 0.038, gain: 0.011, type: "sine" }]
+  },
+  confirm: {
+    cooldown: 95,
+    tones: [
+      { frequency: 360, endFrequency: 560, duration: 0.055, gain: 0.028, type: "triangle" },
+      { frequency: 720, endFrequency: 940, delay: 0.038, duration: 0.052, gain: 0.018, type: "sine" }
+    ]
+  },
+  back: {
+    cooldown: 120,
+    tones: [{ frequency: 360, endFrequency: 190, duration: 0.075, gain: 0.022, type: "triangle" }]
+  }
+};
 
 async function boot() {
   [state, controllerState, systemControllerState] = await Promise.all([
@@ -1413,6 +1437,64 @@ function renderInputTest(gamepad) {
   <div class="axis-grid">${axes || "<p>No analog axes reported.</p>"}</div>`;
 }
 
+function playUiSound(name) {
+  const config = uiSoundConfig[name];
+  if (!config) return;
+
+  const now = performance.now();
+  if (now - (uiSoundLastPlayed[name] || 0) < config.cooldown) return;
+  uiSoundLastPlayed[name] = now;
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  try {
+    uiAudioContext ||= new AudioContextClass();
+    if (uiAudioContext.state === "suspended") {
+      uiAudioContext.resume().catch(() => {});
+    }
+
+    for (const tone of config.tones) {
+      playUiTone(uiAudioContext, tone);
+    }
+  } catch (_error) {
+    // UI sounds are decorative; failure should never interrupt the launcher.
+  }
+}
+
+function playUiTone(context, tone) {
+  const startAt = context.currentTime + (tone.delay || 0);
+  const duration = tone.duration || 0.05;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+
+  oscillator.type = tone.type || "sine";
+  oscillator.frequency.setValueAtTime(tone.frequency, startAt);
+  oscillator.frequency.linearRampToValueAtTime(tone.endFrequency || tone.frequency, startAt + duration);
+
+  gain.gain.setValueAtTime(0.0001, startAt);
+  gain.gain.exponentialRampToValueAtTime(tone.gain || 0.015, startAt + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(startAt);
+  oscillator.stop(startAt + duration + 0.02);
+}
+
+function playButtonUiSound(event) {
+  if (!(event.target instanceof Element)) return;
+  const button = event.target.closest("button");
+  if (!button || button.disabled) return;
+  const isBackAction = button.id.toLowerCase().includes("close") || button.getAttribute("aria-label")?.toLowerCase().includes("close");
+  playUiSound(isBackAction ? "back" : "confirm");
+}
+
+function playScrollUiSound(event) {
+  if (Math.abs(event.deltaX) < 2 && Math.abs(event.deltaY) < 2) return;
+  playUiSound("scroll");
+}
+
 function startUiControllerNavigation() {
   if (uiControllerTimer) return;
   const tick = () => {
@@ -1503,6 +1585,7 @@ function handleUiControllerAction(action) {
   }
 
   if (action === "back") {
+    playUiSound("back");
     closeControllerNavLayer();
     return;
   }
@@ -1619,8 +1702,10 @@ function centerOf(rect) {
 
 function focusControllerElement(element) {
   if (!element) return;
+  const previous = document.activeElement;
   element.focus({ preventScroll: true });
   element.scrollIntoView({ block: "nearest", inline: "nearest" });
+  if (previous !== element) playUiSound("nav");
 }
 
 function activateControllerFocus() {
@@ -2006,6 +2091,8 @@ artworkOverlay.addEventListener("click", (event) => {
   if (event.target === artworkOverlay) closeArtworkCenter();
 });
 
+document.addEventListener("click", playButtonUiSound, true);
+
 window.addEventListener("keydown", (event) => {
   if (handleControllerKeyboardNavigation(event)) return;
   document.body.classList.remove("controller-nav-active");
@@ -2019,6 +2106,8 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("pointerdown", () => {
   document.body.classList.remove("controller-nav-active");
 });
+
+window.addEventListener("wheel", playScrollUiSound, { passive: true });
 
 window.addEventListener("gamepadconnected", async (event) => {
   await refreshSystemControllers();

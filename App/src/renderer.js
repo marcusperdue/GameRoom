@@ -9,6 +9,8 @@ let artworkSearching = false;
 let scanningLibrary = false;
 let applyingControllerProfile = false;
 let coverCacheVersion = Date.now();
+let operationCounter = 0;
+const activeOperations = new Map();
 
 const systemNav = document.querySelector("#systemNav");
 const gameList = document.querySelector("#gameList");
@@ -50,6 +52,7 @@ const importBiosButton = document.querySelector("#importBiosButton");
 const dropZone = document.querySelector("#dropZone");
 const shell = document.querySelector(".shell");
 const toast = document.querySelector("#toast");
+const busyStatus = document.querySelector("#busyStatus");
 
 const systemMeta = {
   All: { label: "All Games", icon: "▦" },
@@ -85,10 +88,7 @@ function render() {
 
 function renderScanButton() {
   if (!scanButton) return;
-  scanButton.classList.toggle("scanning", scanningLibrary);
-  scanButton.disabled = scanningLibrary;
-  const label = scanButton.querySelector(".action-label");
-  if (label) label.textContent = scanningLibrary ? "Scanning" : "Scan Library";
+  setButtonLoading(scanButton, scanningLibrary, "Scanning");
 }
 
 function renderSystems() {
@@ -340,6 +340,74 @@ function showToast(message) {
   showToast.timeout = window.setTimeout(() => toast.classList.remove("show"), 3000);
 }
 
+function startOperation(message) {
+  const id = String(++operationCounter);
+  activeOperations.set(id, message);
+  renderBusyStatus();
+  return id;
+}
+
+function finishOperation(id) {
+  activeOperations.delete(id);
+  renderBusyStatus();
+}
+
+function renderBusyStatus() {
+  if (!busyStatus) return;
+  const messages = Array.from(activeOperations.values());
+  const active = messages.length > 0;
+  busyStatus.hidden = !active;
+  document.body.classList.toggle("app-busy", active);
+  if (!active) return;
+  busyStatus.querySelector("strong").textContent = messages[messages.length - 1];
+}
+
+function normalizeButtonList(buttons) {
+  if (!buttons) return [];
+  if (buttons instanceof NodeList) return Array.from(buttons).filter(Boolean);
+  if (Array.isArray(buttons)) return buttons.filter(Boolean);
+  return [buttons].filter(Boolean);
+}
+
+function setButtonLoading(button, loading, label = "Working") {
+  if (!button) return;
+
+  if (loading) {
+    if (!button.dataset.defaultHtml) {
+      button.dataset.defaultHtml = button.innerHTML;
+      button.dataset.defaultDisabled = button.disabled ? "true" : "false";
+    }
+    button.classList.add("is-loading");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.innerHTML = `<span class="button-spinner" aria-hidden="true"></span><span>${escapeHtml(label)}</span>`;
+    return;
+  }
+
+  button.classList.remove("is-loading");
+  button.removeAttribute("aria-busy");
+  if (button.dataset.defaultHtml) {
+    button.innerHTML = button.dataset.defaultHtml;
+    button.disabled = button.dataset.defaultDisabled === "true";
+    delete button.dataset.defaultHtml;
+    delete button.dataset.defaultDisabled;
+  }
+}
+
+async function withLoading(buttons, options, task) {
+  const targets = normalizeButtonList(buttons);
+  const status = options?.status || options?.buttonLabel || "Working";
+  const buttonLabel = options?.buttonLabel || status;
+  const operationId = startOperation(status);
+  targets.forEach((button) => setButtonLoading(button, true, buttonLabel));
+  try {
+    return await task();
+  } finally {
+    targets.forEach((button) => setButtonLoading(button, false));
+    finishOperation(operationId);
+  }
+}
+
 function userErrorMessage(error) {
   return String(error?.message || error || "Something went wrong").replace(
     /^Error invoking remote method '[^']+': Error: /,
@@ -462,7 +530,12 @@ function renderControllerCenter() {
 
   renderControllerSetupList();
   controllerApplyButton.disabled = applyingControllerProfile || !isReady;
-  controllerApplyButton.textContent = applyingControllerProfile ? "Applying..." : "Apply Universal Setup";
+  if (applyingControllerProfile) {
+    setButtonLoading(controllerApplyButton, true, "Applying");
+  } else {
+    setButtonLoading(controllerApplyButton, false);
+    controllerApplyButton.disabled = !isReady;
+  }
 }
 
 function controllerWaitingTitle(paired) {
@@ -598,6 +671,7 @@ async function applyUniversalControllerSetup() {
 
   applyingControllerProfile = true;
   renderControllerCenter();
+  const operationId = startOperation("Applying controller setup");
   try {
     await rememberConnectedControllers(device);
     const result = await window.gameRoom.applyControllerSetup(summarizeControllerDevice(device));
@@ -611,6 +685,7 @@ async function applyUniversalControllerSetup() {
     showToast(userErrorMessage(error));
   } finally {
     applyingControllerProfile = false;
+    finishOperation(operationId);
     renderControllerCenter();
   }
 }
@@ -691,6 +766,11 @@ function renderArtworkCenter() {
     return;
   }
 
+  if (artworkSearching) {
+    setButtonLoading(archiveSearchButton, true, "Searching");
+  } else {
+    setButtonLoading(archiveSearchButton, false);
+  }
   archiveSearchButton.disabled = artworkSearching;
   googleImagesButton.disabled = false;
   artworkUrlSaveButton.disabled = false;
@@ -742,6 +822,7 @@ async function searchArchiveForArtwork() {
   }
 
   artworkSearching = true;
+  const operationId = startOperation("Searching artwork");
   renderArtworkCenter();
   try {
     artworkResults = await window.gameRoom.searchArchiveArtwork(game.id);
@@ -750,19 +831,20 @@ async function searchArchiveForArtwork() {
     showToast(userErrorMessage(error));
   } finally {
     artworkSearching = false;
+    finishOperation(operationId);
     renderArtworkCenter();
   }
 }
 
-async function saveArtwork(imageUrl, source = {}) {
+async function saveArtwork(imageUrl, source = {}, triggerButton = artworkUrlSaveButton) {
   const game = selectedGameRecord();
   if (!game) {
     showToast("Pick a game first");
     return;
   }
 
-  artworkUrlSaveButton.disabled = true;
-  artworkUrlSaveButton.textContent = "Saving...";
+  const operationId = startOperation("Saving artwork");
+  setButtonLoading(triggerButton, true, "Saving");
   try {
     const result = await window.gameRoom.saveArtworkUrl(game.id, imageUrl, source);
     coverCacheVersion = Date.now();
@@ -775,8 +857,8 @@ async function saveArtwork(imageUrl, source = {}) {
   } catch (error) {
     showToast(userErrorMessage(error));
   } finally {
-    artworkUrlSaveButton.disabled = false;
-    artworkUrlSaveButton.textContent = "Save URL";
+    setButtonLoading(triggerButton, false);
+    finishOperation(operationId);
   }
 }
 
@@ -866,8 +948,18 @@ shell.addEventListener("click", async (event) => {
 
   const playButton = event.target.closest("[data-play]");
   if (playButton) {
+    const game = selectedGameRecord();
+    const issue = game ? issueForSystem(game.system) : null;
+    if (issue) {
+      showToast(`${issue.label}: ${displayPath(issue.detail)}`);
+      return;
+    }
+
     try {
-      const result = await window.gameRoom.launchGame(selectedGameId);
+      const result = await withLoading(shell.querySelectorAll("[data-play]"), {
+        buttonLabel: "Launching",
+        status: `Launching ${game?.title || "game"}`
+      }, () => window.gameRoom.launchGame(selectedGameId));
       showToast(`Launching ${result.game.title}`);
     } catch (error) {
       showToast(userErrorMessage(error));
@@ -890,13 +982,23 @@ shell.addEventListener("click", async (event) => {
   const folderButton = event.target.closest("[data-folder]");
   if (folderButton) {
     const target = state.config[folderButton.dataset.folder];
-    await window.gameRoom.revealFolder(target);
+    try {
+      await withLoading(folderButton, {
+        buttonLabel: "Opening",
+        status: "Opening folder"
+      }, () => window.gameRoom.revealFolder(target));
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
   }
 });
 
 importButton.addEventListener("click", async () => {
   try {
-    const result = await window.gameRoom.pickImportGames(currentImportSystem());
+    const result = await withLoading(importButton, {
+      buttonLabel: "Choosing",
+      status: "Opening game picker"
+    }, () => window.gameRoom.pickImportGames(currentImportSystem()));
     await refreshAfterImport(result);
   } catch (error) {
     showToast(userErrorMessage(error));
@@ -908,13 +1010,18 @@ scanButton.addEventListener("click", async () => {
   scanningLibrary = true;
   renderScanButton();
   try {
-    state.library = await window.gameRoom.scanLibrary();
-    state = await window.gameRoom.getState();
-    if (!state.library.some((game) => game.id === selectedGameId)) {
-      selectedGameId = state.library[0]?.id ?? null;
-    }
-    render();
-    showToast(`Scanned ${state.library.length} game${state.library.length === 1 ? "" : "s"}`);
+    await withLoading(scanButton, {
+      buttonLabel: "Scanning",
+      status: "Scanning library"
+    }, async () => {
+      state.library = await window.gameRoom.scanLibrary();
+      state = await window.gameRoom.getState();
+      if (!state.library.some((game) => game.id === selectedGameId)) {
+        selectedGameId = state.library[0]?.id ?? null;
+      }
+      render();
+      showToast(`Scanned ${state.library.length} game${state.library.length === 1 ? "" : "s"}`);
+    });
   } catch (error) {
     showToast(userErrorMessage(error));
   } finally {
@@ -924,10 +1031,19 @@ scanButton.addEventListener("click", async () => {
 });
 
 snapshotButton.addEventListener("click", async () => {
-  await window.gameRoom.snapshotSaves();
-  state = await window.gameRoom.getState();
-  render();
-  showToast("Save backup created");
+  try {
+    await withLoading(snapshotButton, {
+      buttonLabel: "Backing Up",
+      status: "Backing up saves"
+    }, async () => {
+      await window.gameRoom.snapshotSaves();
+      state = await window.gameRoom.getState();
+      render();
+      showToast("Save backup created");
+    });
+  } catch (error) {
+    showToast(userErrorMessage(error));
+  }
 });
 
 guideButton.addEventListener("click", openGuide);
@@ -943,10 +1059,19 @@ controllerCloseButton.addEventListener("click", closeControllerCenter);
 controllerApplyButton.addEventListener("click", applyUniversalControllerSetup);
 
 controllerRefreshButton.addEventListener("click", async () => {
-  await refreshSystemControllers();
-  await rememberConnectedControllers();
-  renderControllerCenter();
-  showToast("Controller list refreshed");
+  try {
+    await withLoading(controllerRefreshButton, {
+      buttonLabel: "Refreshing",
+      status: "Refreshing controllers"
+    }, async () => {
+      await refreshSystemControllers();
+      await rememberConnectedControllers();
+      renderControllerCenter();
+      showToast("Controller list refreshed");
+    });
+  } catch (error) {
+    showToast(userErrorMessage(error));
+  }
 });
 
 controllerOverlay.addEventListener("click", async (event) => {
@@ -957,15 +1082,27 @@ controllerOverlay.addEventListener("click", async (event) => {
 
   const bluetoothButton = event.target.closest("[data-open-bluetooth]");
   if (bluetoothButton) {
-    await window.gameRoom.openBluetoothSettings();
-    showToast("Opened Bluetooth settings");
+    try {
+      await withLoading(bluetoothButton, {
+        buttonLabel: "Opening",
+        status: "Opening Bluetooth settings"
+      }, async () => {
+        await window.gameRoom.openBluetoothSettings();
+        showToast("Opened Bluetooth settings");
+      });
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
     return;
   }
 
   const openEmulatorButton = event.target.closest("[data-open-emulator]");
   if (openEmulatorButton) {
     try {
-      const result = await window.gameRoom.openEmulator(openEmulatorButton.dataset.openEmulator);
+      const result = await withLoading(openEmulatorButton, {
+        buttonLabel: "Opening",
+        status: "Opening emulator"
+      }, () => window.gameRoom.openEmulator(openEmulatorButton.dataset.openEmulator));
       showToast(`Opened ${result.emulator}`);
     } catch (error) {
       showToast(userErrorMessage(error));
@@ -1001,7 +1138,10 @@ googleImagesButton.addEventListener("click", async () => {
   }
 
   try {
-    await window.gameRoom.openGoogleImages(game.id);
+    await withLoading(googleImagesButton, {
+      buttonLabel: "Opening",
+      status: "Opening Google Images"
+    }, () => window.gameRoom.openGoogleImages(game.id));
     showToast("Opened Google Images");
   } catch (error) {
     showToast(userErrorMessage(error));
@@ -1018,7 +1158,7 @@ artworkUrlSaveButton.addEventListener("click", async () => {
   await saveArtwork(imageUrl, {
     provider: "Manual URL",
     imageUrl
-  });
+  }, artworkUrlSaveButton);
 });
 
 artworkResultsPanel.addEventListener("click", async (event) => {
@@ -1027,7 +1167,7 @@ artworkResultsPanel.addEventListener("click", async (event) => {
 
   const result = artworkResults[Number(button.dataset.artworkIndex)];
   if (!result) return;
-  await saveArtwork(result.imageUrl, result);
+  await saveArtwork(result.imageUrl, result, button);
 });
 
 artworkOverlay.addEventListener("click", (event) => {
@@ -1059,7 +1199,10 @@ window.addEventListener("gamepaddisconnected", async (event) => {
 
 importBiosButton.addEventListener("click", async () => {
   try {
-    const result = await window.gameRoom.importBatoceraBios();
+    const result = await withLoading(importBiosButton, {
+      buttonLabel: "Importing",
+      status: "Importing BIOS files"
+    }, () => window.gameRoom.importBatoceraBios());
     state = result.state;
     render();
     const copied = Object.values(result.report).reduce((sum, item) => sum + item.copied, 0);
@@ -1095,10 +1238,15 @@ dropZone.addEventListener("drop", async (event) => {
   }
 
   try {
-    const result = await window.gameRoom.importGames(files, currentImportSystem());
+    dropZone.classList.add("busy");
+    const result = await withLoading(null, {
+      status: `Importing ${files.length} dropped file${files.length === 1 ? "" : "s"}`
+    }, () => window.gameRoom.importGames(files, currentImportSystem()));
     await refreshAfterImport(result);
   } catch (error) {
     showToast(userErrorMessage(error));
+  } finally {
+    dropZone.classList.remove("busy");
   }
 });
 

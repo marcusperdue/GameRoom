@@ -46,6 +46,26 @@ button {
   color: inherit;
 }
 
+button {
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid rgba(56, 217, 130, 0.72);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
 h1,
 h2,
 h3,
@@ -226,6 +246,11 @@ input {
   background: linear-gradient(90deg, rgba(56, 217, 130, 0.18), rgba(255, 255, 255, 0.03));
 }
 
+.system-card:not(:disabled):hover {
+  border-color: rgba(56, 217, 130, 0.22);
+  background: rgba(255, 255, 255, 0.045);
+}
+
 .system-card.active::before {
   content: "";
   position: absolute;
@@ -353,6 +378,30 @@ input {
   }
 }
 
+.button-spinner,
+.busy-spinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 760ms linear infinite;
+}
+
+button.is-loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+button.is-loading .button-spinner {
+  opacity: 0.92;
+}
+
 .stage {
   display: grid;
   grid-template-rows: auto auto minmax(220px, 1fr) minmax(260px, 1fr);
@@ -425,6 +474,25 @@ input {
   gap: 8px;
   padding: 0 13px;
   white-space: nowrap;
+}
+
+.actions button:not(:disabled):hover,
+.detail-actions button:not(:disabled):hover,
+.quick-dock button:not(:disabled):hover,
+.artwork-toolbar button:not(:disabled):hover,
+.controller-card button:not(:disabled):hover,
+.controller-empty button:not(:disabled):hover,
+.controller-setup-card button:not(:disabled):hover,
+.empty-state button:not(:disabled):hover {
+  border-color: rgba(56, 217, 130, 0.34);
+  background: rgba(56, 217, 130, 0.09);
+  transform: translateY(-1px);
+}
+
+.hero-play:not(:disabled):hover,
+.primary:not(:disabled):hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
 }
 
 .primary-action {
@@ -651,6 +719,15 @@ input {
   background: rgba(56, 217, 130, 0.1);
 }
 
+.drop-zone.busy {
+  border-color: rgba(80, 167, 255, 0.42);
+  background: rgba(80, 167, 255, 0.08);
+}
+
+.drop-zone.busy > span {
+  animation: spin 900ms linear infinite;
+}
+
 .drop-zone > span {
   display: grid;
   place-items: center;
@@ -696,6 +773,11 @@ input {
   cursor: pointer;
 }
 
+.game-card:not(:disabled):hover .poster {
+  border-color: rgba(56, 217, 130, 0.34);
+  transform: translateY(-2px);
+}
+
 .poster {
   position: relative;
   display: grid;
@@ -706,6 +788,7 @@ input {
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+  transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
 }
 
 .game-card.selected .poster {
@@ -914,6 +997,40 @@ input {
 .toast.show {
   transform: translateY(0);
   opacity: 1;
+}
+
+.busy-status {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  z-index: 21;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 44px));
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(56, 217, 130, 0.32);
+  border-radius: 999px;
+  background: rgba(12, 20, 25, 0.94);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  transform: translateX(-50%);
+}
+
+.busy-status[hidden] {
+  display: none;
+}
+
+.busy-status strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.busy-status .busy-spinner {
+  color: var(--green);
 }
 
 .guide-overlay,

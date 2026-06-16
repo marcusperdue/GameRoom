@@ -230,8 +230,15 @@ input {
 }
 
 .system-card {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
   position: relative;
-  gap: 12px;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   min-height: 44px;
   padding: 0 10px;
   border: 1px solid transparent;
@@ -268,14 +275,13 @@ input {
 .system-icon {
   display: grid;
   place-items: center;
-  flex: 0 0 auto;
   width: 26px;
+  min-width: 0;
   color: var(--green);
   font-size: 20px;
 }
 
 .system-name {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -284,8 +290,9 @@ input {
 }
 
 .system-card small {
-  flex: 0 0 auto;
-  max-width: 82px;
+  justify-self: end;
+  min-width: 0;
+  max-width: 74px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1988,6 +1995,11 @@ button.is-loading .button-spinner {
   .system-card,
   .quick-dock button {
     flex: 0 0 auto;
+  }
+
+  .system-card {
+    width: auto;
+    grid-template-columns: 26px max-content auto;
   }
 
   .stage {

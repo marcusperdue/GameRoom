@@ -6,6 +6,9 @@ let selectedGameId = null;
 let controllerPollTimer = null;
 let artworkResults = [];
 let artworkSearching = false;
+let scanningLibrary = false;
+let applyingControllerProfile = false;
+let coverCacheVersion = Date.now();
 
 const systemNav = document.querySelector("#systemNav");
 const gameList = document.querySelector("#gameList");
@@ -30,9 +33,11 @@ const guideCloseButton = document.querySelector("#guideCloseButton");
 const controllerOverlay = document.querySelector("#controllerOverlay");
 const controllerCloseButton = document.querySelector("#controllerCloseButton");
 const controllerRefreshButton = document.querySelector("#controllerRefreshButton");
+const controllerApplyButton = document.querySelector("#controllerApplyButton");
 const controllerSummary = document.querySelector("#controllerSummary");
 const controllerList = document.querySelector("#controllerList");
 const controllerTest = document.querySelector("#controllerTest");
+const controllerSetupList = document.querySelector("#controllerSetupList");
 const artworkOverlay = document.querySelector("#artworkOverlay");
 const artworkCloseButton = document.querySelector("#artworkCloseButton");
 const artworkSelected = document.querySelector("#artworkSelected");
@@ -70,11 +75,20 @@ async function boot() {
 function render() {
   rootPath.textContent = displayPath(state.config.rootDir);
   storageText.textContent = `${state.library.length} game${state.library.length === 1 ? "" : "s"} ready`;
+  renderScanButton();
   renderSetup();
   renderSystems();
   renderLibrary();
   renderHero();
   renderSelected();
+}
+
+function renderScanButton() {
+  if (!scanButton) return;
+  scanButton.classList.toggle("scanning", scanningLibrary);
+  scanButton.disabled = scanningLibrary;
+  const label = scanButton.querySelector(".action-label");
+  if (label) label.textContent = scanningLibrary ? "Scanning" : "Scan Library";
 }
 
 function renderSystems() {
@@ -119,7 +133,7 @@ function renderGameRow(game) {
   const cover = coverUrl(game);
   const issue = issueForSystem(game.system);
   return `<button class="game-card ${selectedGameId === game.id ? "selected" : ""} ${issue ? "needs" : ""}" data-game-id="${game.id}" type="button">
-    <div class="poster ${cover ? "has-art" : ""}" ${cover ? `style="background-image:url('${cover}')"` : ""}>
+    <div class="poster ${cover ? "has-art" : ""}"${coverStyle(game)}>
       <span>${cover ? "" : coverText(game)}</span>
       ${issue ? "<em>Setup</em>" : ""}
     </div>
@@ -138,14 +152,14 @@ function renderHero() {
         <p class="eyebrow">GameRoom</p>
         <h2>Add your first game</h2>
         <p>Pick a console, add games, then press Play.</p>
-        <button class="hero-play" id="heroAddButton" type="button"><span>+</span>Add Games</button>
+        <button class="hero-play" id="heroAddButton" type="button"><span class="action-icon plus-icon" aria-hidden="true"></span>Add Games</button>
       </div>`;
     return;
   }
 
   const issue = issueForSystem(game.system);
   const cover = coverUrl(game);
-  heroGame.innerHTML = `<div class="hero-backdrop ${cover ? "has-art" : ""}" ${cover ? `style="background-image:url('${cover}')"` : ""}>
+  heroGame.innerHTML = `<div class="hero-backdrop ${cover ? "has-art" : ""}"${coverStyle(game)}>
       <span>${coverText(game)}</span>
     </div>
     <div class="hero-copy">
@@ -175,7 +189,7 @@ function renderSelected() {
   const issue = issueForSystem(game.system);
   const cover = coverUrl(game);
   selectedGame.innerHTML = `
-    <div class="detail-art ${cover ? "has-art" : ""}" ${cover ? `style="background-image:url('${cover}')"` : ""}>
+    <div class="detail-art ${cover ? "has-art" : ""}"${coverStyle(game)}>
       <span>${coverText(game)}</span>
     </div>
     <div class="detail-copy">
@@ -274,7 +288,13 @@ function coverText(game) {
 
 function coverUrl(game) {
   if (!game.coverPath) return "";
-  return `file://${encodeURI(absolutePath(game.coverPath))}`;
+  const version = encodeURIComponent(game.coverUpdatedAt || coverCacheVersion);
+  return `file://${encodeURI(absolutePath(game.coverPath)).replace(/'/g, "%27")}?v=${version}`;
+}
+
+function coverStyle(game) {
+  const cover = coverUrl(game);
+  return cover ? ` style="background-image:url(&quot;${escapeAttribute(cover)}&quot;)"` : "";
 }
 
 function displayPath(value) {
@@ -418,7 +438,7 @@ function renderControllerCenter() {
   const devices = controllerDevices();
   const selected = activeController(devices);
   const paired = systemPairedControllers();
-  const savedName = controllerState?.defaultController || "";
+  const savedName = defaultControllerName();
   const isSupported = gamepadApiAvailable();
   const hasLiveInput = devices.some((device) => device.live);
   const isReady = devices.length > 0;
@@ -432,13 +452,17 @@ function renderControllerCenter() {
   </div>`;
 
   controllerList.innerHTML = devices.length
-    ? devices.map((device) => renderControllerCard(device, savedName)).join("")
+    ? devices.map((device) => renderControllerCard(device, controllerState?.defaultController || "")).join("")
     : renderNoController(savedName, isSupported, paired);
 
   controllerTest.innerHTML = selected?.live ? renderInputTest(selected.gamepad) : selected ? renderSystemInputFallback(selected) : `<div class="input-empty">
     <strong>Nothing to test yet</strong>
     <p>Connect by USB or pair over Bluetooth, then press any controller button.</p>
   </div>`;
+
+  renderControllerSetupList();
+  controllerApplyButton.disabled = applyingControllerProfile || !isReady;
+  controllerApplyButton.textContent = applyingControllerProfile ? "Applying..." : "Apply Universal Setup";
 }
 
 function controllerWaitingTitle(paired) {
@@ -446,13 +470,52 @@ function controllerWaitingTitle(paired) {
 }
 
 function controllerSummaryText(devices, paired, savedName, hasLiveInput, isSupported) {
+  const savedId = controllerState?.defaultController || "";
   if (!devices.length && paired.length) return `${paired[0].name} is paired. Turn it on, plug it in, or reconnect in Bluetooth settings.`;
   if (!devices.length && savedName) return `Default saved: ${savedName}`;
   if (!devices.length) return "Pair Bluetooth in the operating system first, or plug in by USB.";
-  if (savedName && devices.some((device) => device.id === savedName)) return `Default active: ${cleanControllerName(savedName)}`;
+  if (savedId && devices.some((device) => device.id === savedId)) return `Default active: ${savedName}`;
   if (hasLiveInput) return "Live input is available in GameRoom.";
   if (isSupported) return "macOS sees this controller. Chromium did not expose live input, but emulators should still see it.";
   return "The operating system sees this controller. Emulators should be able to use it.";
+}
+
+function defaultControllerName() {
+  const id = controllerState?.defaultController || "";
+  if (!id) return "";
+  return controllerState?.profiles?.[id]?.name || cleanControllerName(id);
+}
+
+function renderControllerSetupList() {
+  const rows = Array.isArray(controllerState?.emulatorSetup) ? controllerState.emulatorSetup : [];
+  if (!rows.length) {
+    controllerSetupList.innerHTML = `<div class="controller-empty compact">
+      <strong>No emulator setup applied yet</strong>
+      <p>Apply once after connecting your controller. Dolphin can be written automatically; other emulators open for final confirmation.</p>
+    </div>`;
+    return;
+  }
+
+  controllerSetupList.innerHTML = rows.map((row) => {
+    const statusLabel = setupStatusLabel(row.status);
+    const systemName = row.system === "GameCube / Wii" ? "GameCube" : row.system;
+    return `<article class="controller-setup-card ${escapeAttribute(row.status || "needsReview")}">
+      <span>${escapeHtml(statusLabel)}</span>
+      <div>
+        <strong>${escapeHtml(row.system || row.emulator || "Emulator")}</strong>
+        <p>${escapeHtml(row.label || "")}</p>
+        <small>${escapeHtml(displayPath(row.detail || ""))}</small>
+      </div>
+      ${row.canOpen ? `<button data-open-emulator="${escapeAttribute(systemName)}" type="button">Open</button>` : ""}
+    </article>`;
+  }).join("");
+}
+
+function setupStatusLabel(status) {
+  if (status === "applied") return "Applied";
+  if (status === "saved") return "Saved";
+  if (status === "missing") return "Missing";
+  return "Check";
 }
 
 function renderNoController(savedName, isSupported, paired = []) {
@@ -524,6 +587,32 @@ async function rememberConnectedControllers(defaultDevice = null) {
     lastSeen,
     profiles
   });
+}
+
+async function applyUniversalControllerSetup() {
+  const device = activeController();
+  if (!device) {
+    showToast("Connect a controller first");
+    return;
+  }
+
+  applyingControllerProfile = true;
+  renderControllerCenter();
+  try {
+    await rememberConnectedControllers(device);
+    const result = await window.gameRoom.applyControllerSetup(summarizeControllerDevice(device));
+    controllerState = result.controllerState;
+    state = result.state;
+    render();
+    renderControllerCenter();
+    const applied = result.actions.filter((action) => action.status === "applied").length;
+    showToast(applied ? `Applied controller setup to ${applied} emulator` : "Controller profile saved");
+  } catch (error) {
+    showToast(userErrorMessage(error));
+  } finally {
+    applyingControllerProfile = false;
+    renderControllerCenter();
+  }
 }
 
 async function openControllerCenter() {
@@ -607,7 +696,7 @@ function renderArtworkCenter() {
   artworkUrlSaveButton.disabled = false;
   const cover = coverUrl(game);
   artworkSelected.innerHTML = `<div class="artwork-current ${cover ? "has-art" : ""}">
-    <div class="artwork-thumb" ${cover ? `style="background-image:url('${cover}')"` : ""}><span>${coverText(game)}</span></div>
+    <div class="artwork-thumb"${coverStyle(game)}><span>${coverText(game)}</span></div>
     <div>
       <strong>${escapeHtml(game.title)}</strong>
       <p>${labelFor(game.system)} · ${escapeHtml(game.format)} · ${cover ? "Cover saved" : "No cover yet"}</p>
@@ -672,15 +761,22 @@ async function saveArtwork(imageUrl, source = {}) {
     return;
   }
 
+  artworkUrlSaveButton.disabled = true;
+  artworkUrlSaveButton.textContent = "Saving...";
   try {
     const result = await window.gameRoom.saveArtworkUrl(game.id, imageUrl, source);
-    state = result.state;
-    selectedGameId = game.id;
+    coverCacheVersion = Date.now();
+    state = result.state || await window.gameRoom.getState();
+    selectedGameId = result.gameId || game.id;
+    artworkUrlInput.value = "";
     render();
     renderArtworkCenter();
     showToast(`Saved cover for ${game.title}`);
   } catch (error) {
     showToast(userErrorMessage(error));
+  } finally {
+    artworkUrlSaveButton.disabled = false;
+    artworkUrlSaveButton.textContent = "Save URL";
   }
 }
 
@@ -808,13 +904,23 @@ importButton.addEventListener("click", async () => {
 });
 
 scanButton.addEventListener("click", async () => {
-  state.library = await window.gameRoom.scanLibrary();
-  state = await window.gameRoom.getState();
-  if (!state.library.some((game) => game.id === selectedGameId)) {
-    selectedGameId = state.library[0]?.id ?? null;
+  if (scanningLibrary) return;
+  scanningLibrary = true;
+  renderScanButton();
+  try {
+    state.library = await window.gameRoom.scanLibrary();
+    state = await window.gameRoom.getState();
+    if (!state.library.some((game) => game.id === selectedGameId)) {
+      selectedGameId = state.library[0]?.id ?? null;
+    }
+    render();
+    showToast(`Scanned ${state.library.length} game${state.library.length === 1 ? "" : "s"}`);
+  } catch (error) {
+    showToast(userErrorMessage(error));
+  } finally {
+    scanningLibrary = false;
+    renderScanButton();
   }
-  render();
-  showToast(`Scanned ${state.library.length} game${state.library.length === 1 ? "" : "s"}`);
 });
 
 snapshotButton.addEventListener("click", async () => {
@@ -834,6 +940,8 @@ guideOverlay.addEventListener("click", (event) => {
 
 controllerCloseButton.addEventListener("click", closeControllerCenter);
 
+controllerApplyButton.addEventListener("click", applyUniversalControllerSetup);
+
 controllerRefreshButton.addEventListener("click", async () => {
   await refreshSystemControllers();
   await rememberConnectedControllers();
@@ -851,6 +959,17 @@ controllerOverlay.addEventListener("click", async (event) => {
   if (bluetoothButton) {
     await window.gameRoom.openBluetoothSettings();
     showToast("Opened Bluetooth settings");
+    return;
+  }
+
+  const openEmulatorButton = event.target.closest("[data-open-emulator]");
+  if (openEmulatorButton) {
+    try {
+      const result = await window.gameRoom.openEmulator(openEmulatorButton.dataset.openEmulator);
+      showToast(`Opened ${result.emulator}`);
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
     return;
   }
 

@@ -12,7 +12,6 @@
         <div class="window-dots" aria-hidden="true"><span></span><span></span><span></span></div>
 
         <div class="brand">
-          <div class="brand-mark">GR</div>
           <div>
             <h1>GameRoom</h1>
             <p id="storageText">Console launcher</p>
@@ -44,10 +43,10 @@
             <h2 id="systemTitle">All Games</h2>
           </div>
           <div class="actions">
-            <button id="importButton" class="primary-action" type="button"><span>+</span>Add Games</button>
-            <button id="scanButton" type="button"><span>⌕</span>Scan Library</button>
-            <button id="snapshotButton" type="button"><span>☁</span>Backup Saves</button>
-            <button id="guideButton" type="button"><span>?</span>Guide</button>
+            <button id="importButton" class="primary-action" type="button"><span class="action-icon plus-icon" aria-hidden="true"></span><span class="action-label">Add Games</span></button>
+            <button id="scanButton" type="button"><span class="action-icon scan-icon" aria-hidden="true">↻</span><span class="action-label">Scan Library</span></button>
+            <button id="snapshotButton" type="button"><span class="action-icon" aria-hidden="true">☁</span><span class="action-label">Backup Saves</span></button>
+            <button id="guideButton" type="button"><span class="action-icon" aria-hidden="true">?</span><span class="action-label">Guide</span></button>
           </div>
         </header>
 
@@ -147,6 +146,14 @@
 
         <section class="controller-summary" id="controllerSummary"></section>
 
+        <section class="controller-apply">
+          <div>
+            <strong>Universal setup</strong>
+            <p>Save one standard profile, apply Dolphin automatically, then confirm the rest inside each emulator.</p>
+          </div>
+          <button id="controllerApplyButton" type="button">Apply Universal Setup</button>
+        </section>
+
         <div class="controller-layout">
           <section class="controller-panel">
             <div class="panel-head">
@@ -169,6 +176,8 @@
             <div id="controllerTest" class="controller-test"></div>
           </section>
         </div>
+
+        <section class="controller-setup-list" id="controllerSetupList"></section>
 
         <section class="controller-notes">
           <div>

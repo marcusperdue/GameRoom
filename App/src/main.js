@@ -15,6 +15,7 @@ const controllerProfilesPath = path.join(configDir, "controllers.json");
 const backupsDir = path.join(rootDir, "Backups", "Saves");
 const batoceraRoot = path.join(os.homedir(), "Library", "Mobile Documents", "com~apple~CloudDocs", "Batocera");
 const platformFolder = process.platform === "darwin" ? "macOS" : process.platform === "win32" ? "Windows" : "Linux";
+const coverExtensions = ["png", "jpg", "jpeg", "webp", "gif", "avif"];
 const portableFolderDefaults = {
   gameRoot: "Games",
   saveRoot: "Saves",
@@ -302,6 +303,8 @@ function createDefaultControllerState() {
     defaultController: "",
     lastSeen: [],
     profiles: {},
+    universalProfile: null,
+    emulatorSetup: [],
     updatedAt: null
   };
 }
@@ -320,14 +323,20 @@ function normalizeControllerState(rawState = {}) {
       .slice(0, 12)
       .map((controller) => ({
         id: controller.id,
+        name: typeof controller.name === "string" ? controller.name : "",
         index: Number.isInteger(controller.index) ? controller.index : 0,
         mapping: typeof controller.mapping === "string" ? controller.mapping : "",
         buttons: Number.isInteger(controller.buttons) ? controller.buttons : 0,
         axes: Number.isInteger(controller.axes) ? controller.axes : 0,
+        source: typeof controller.source === "string" ? controller.source : "",
+        transport: typeof controller.transport === "string" ? controller.transport : "",
+        live: Boolean(controller.live),
         connectedAt: controller.connectedAt || null,
         updatedAt: controller.updatedAt || null
       })),
     profiles,
+    universalProfile: rawState.universalProfile && typeof rawState.universalProfile === "object" ? rawState.universalProfile : null,
+    emulatorSetup: Array.isArray(rawState.emulatorSetup) ? rawState.emulatorSetup : [],
     updatedAt: rawState.updatedAt || null
   };
 }
@@ -486,6 +495,205 @@ async function openBluetoothSettings() {
   return false;
 }
 
+async function applyUniversalControllerSetup(controller = {}) {
+  const rawConfig = await readJson(configPath, createDefaultConfig());
+  const config = normalizeConfig(rawConfig);
+  const profiles = normalizeProfiles(await readJson(emulatorProfilesPath, {}), rawConfig.rootDir);
+  const hasControllerIdentity = Boolean(
+    (typeof controller.id === "string" && controller.id.trim()) ||
+    (typeof controller.name === "string" && controller.name.trim())
+  );
+  if (!hasControllerIdentity) {
+    throw new Error("Connect a controller first, then press any button before applying setup.");
+  }
+
+  const controllerProfile = createUniversalControllerProfile(controller);
+
+  const universalFolder = path.join(config.controlsRoot, "Universal");
+  await fsp.mkdir(universalFolder, { recursive: true });
+  const universalPath = path.join(universalFolder, "profile.json");
+  await writeJson(universalPath, controllerProfile);
+
+  const actions = [];
+  actions.push(await writeDolphinControllerSetup(config, controllerProfile));
+
+  for (const [systemName, system] of Object.entries(systems)) {
+    if (system.emulator === "Dolphin") continue;
+    actions.push(await writeEmulatorControllerRecord(config, profiles, systemName, controllerProfile));
+  }
+
+  const nextState = await saveControllerState({
+    defaultController: controllerProfile.controller.id,
+    universalProfile: {
+      ...controllerProfile,
+      path: toPortablePath(universalPath)
+    },
+    emulatorSetup: actions,
+    profiles: {
+      [controllerProfile.controller.id]: controllerProfile.controller
+    }
+  });
+
+  return {
+    controllerState: nextState,
+    actions,
+    profilePath: toPortablePath(universalPath),
+    state: await getState()
+  };
+}
+
+function createUniversalControllerProfile(controller = {}) {
+  const name = cleanDeviceName(controller.name || controller.id || "Controller");
+  return {
+    version: 1,
+    appliedAt: new Date().toISOString(),
+    controller: {
+      id: typeof controller.id === "string" ? controller.id : "",
+      name,
+      mapping: typeof controller.mapping === "string" ? controller.mapping : "standard",
+      source: typeof controller.source === "string" ? controller.source : "",
+      transport: typeof controller.transport === "string" ? controller.transport : "",
+      buttons: Number.isInteger(controller.buttons) ? controller.buttons : 0,
+      axes: Number.isInteger(controller.axes) ? controller.axes : 0,
+      live: Boolean(controller.live)
+    },
+    standardMap: {
+      face: { south: 0, east: 1, west: 2, north: 3 },
+      shoulders: { left: 4, right: 5 },
+      triggers: { left: 6, right: 7 },
+      menu: { back: 8, start: 9, home: 16 },
+      sticks: { leftPress: 10, rightPress: 11 },
+      dpad: { up: 12, down: 13, left: 14, right: 15 },
+      axes: { leftX: 0, leftY: 1, rightX: 2, rightY: 3 }
+    }
+  };
+}
+
+async function writeDolphinControllerSetup(config, controllerProfile) {
+  const emulator = "Dolphin";
+  const systemName = "GameCube / Wii";
+  const outputFolder = path.join(config.controlsRoot, emulator);
+  await fsp.mkdir(outputFolder, { recursive: true });
+
+  const gcPadText = dolphinGameCubePadIni(controllerProfile.controller.name);
+  const gcPadTemplate = path.join(outputFolder, "GCPadNew.ini");
+  await fsp.writeFile(gcPadTemplate, gcPadText);
+
+  const action = {
+    system: systemName,
+    emulator,
+    status: "saved",
+    label: "Saved Dolphin profile template",
+    detail: toPortablePath(gcPadTemplate),
+    canOpen: true
+  };
+
+  const dolphinConfig = dolphinConfigFolder();
+  const gcPadTarget = dolphinConfig ? path.join(dolphinConfig, "GCPadNew.ini") : "";
+  if (!gcPadTarget) {
+    action.status = "needsReview";
+    action.label = "Dolphin config folder not found";
+    action.detail = toPortablePath(gcPadTemplate);
+    return action;
+  }
+
+  try {
+    await fsp.mkdir(dolphinConfig, { recursive: true });
+    await backupExistingConfig(gcPadTarget, "Dolphin");
+    await fsp.writeFile(gcPadTarget, gcPadText);
+    action.status = "applied";
+    action.label = "Applied GameCube pad profile";
+    action.detail = gcPadTarget;
+  } catch (error) {
+    action.status = "needsReview";
+    action.label = "Could not write Dolphin config";
+    action.detail = error.message;
+  }
+
+  return action;
+}
+
+async function writeEmulatorControllerRecord(config, profiles, systemName, controllerProfile) {
+  const system = systems[systemName];
+  const outputFolder = path.join(config.controlsRoot, system.emulator);
+  await fsp.mkdir(outputFolder, { recursive: true });
+  const setupPath = path.join(outputFolder, `${systemName}.json`);
+  const configured = Boolean(profiles[systemName]?.command && commandExists(profiles[systemName].command));
+  await writeJson(setupPath, {
+    system: systemName,
+    emulator: system.emulator,
+    controller: controllerProfile.controller,
+    standardMap: controllerProfile.standardMap,
+    note: `${system.emulator} keeps final button binding in its own settings. Open the emulator once and select this controller for player 1.`,
+    updatedAt: new Date().toISOString()
+  });
+
+  return {
+    system: systemName,
+    emulator: system.emulator,
+    status: configured ? "needsReview" : "missing",
+    label: configured ? "Profile saved, confirm in emulator" : "Emulator not configured",
+    detail: configured ? toPortablePath(setupPath) : profiles[systemName]?.command || "Not configured",
+    canOpen: configured
+  };
+}
+
+function dolphinConfigFolder() {
+  if (process.platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "Dolphin", "Config");
+  if (process.platform === "win32") return path.join(os.homedir(), "Documents", "Dolphin Emulator", "Config");
+  return path.join(os.homedir(), ".config", "dolphin-emu");
+}
+
+function dolphinGameCubePadIni(controllerName) {
+  const device = `SDL/0/${dolphinSafeDeviceName(controllerName)}`;
+  return [
+    "[GCPad1]",
+    `Device = ${device}`,
+    "Buttons/A = `Button 0`",
+    "Buttons/B = `Button 1`",
+    "Buttons/X = `Button 2`",
+    "Buttons/Y = `Button 3`",
+    "Buttons/Z = `Button 5`",
+    "Buttons/Start = `Button 9`",
+    "Main Stick/Up = `Axis 1-`",
+    "Main Stick/Down = `Axis 1+`",
+    "Main Stick/Left = `Axis 0-`",
+    "Main Stick/Right = `Axis 0+`",
+    "Main Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42",
+    "C-Stick/Up = `Axis 3-`",
+    "C-Stick/Down = `Axis 3+`",
+    "C-Stick/Left = `Axis 2-`",
+    "C-Stick/Right = `Axis 2+`",
+    "C-Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42",
+    "Triggers/L = `Button 6`",
+    "Triggers/R = `Button 7`",
+    "D-Pad/Up = `Button 12`",
+    "D-Pad/Down = `Button 13`",
+    "D-Pad/Left = `Button 14`",
+    "D-Pad/Right = `Button 15`",
+    "[GCPad2]",
+    "Device =",
+    "[GCPad3]",
+    "Device =",
+    "[GCPad4]",
+    "Device =",
+    ""
+  ].join("\n");
+}
+
+function dolphinSafeDeviceName(name) {
+  return cleanDeviceName(name).replace(/[`[\]\r\n]/g, "").slice(0, 120) || "Controller";
+}
+
+async function backupExistingConfig(filePath, emulatorName) {
+  if (!fs.existsSync(filePath)) return "";
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const target = path.join(rootDir, "Backups", "Config", stamp, emulatorName, path.basename(filePath));
+  await fsp.mkdir(path.dirname(target), { recursive: true });
+  await fsp.copyFile(filePath, target);
+  return target;
+}
+
 function resolveCommandPath(command, sourceRoot = rootDir) {
   if (!command || !commandLooksLikePath(command)) return command || "";
   return resolveConfiguredPath(command, sourceRoot, command);
@@ -560,13 +768,16 @@ async function scanLibrary() {
       if (!system.extensions.includes(ext)) continue;
       const stats = await fsp.stat(filePath);
       const portableGamePath = toPortablePath(filePath);
+      const coverPath = findCoverPath(config, systemName, cleanTitle(path.basename(filePath, ext)), stableId(portableGamePath));
+      const coverStats = coverPath ? await safeStat(coverPath) : null;
       library.push({
         id: stableId(portableGamePath),
         title: cleanTitle(path.basename(filePath, ext)),
         system: systemName,
         emulator: system.emulator,
         path: portableGamePath,
-        coverPath: toPortablePath(findCoverPath(config, systemName, cleanTitle(path.basename(filePath, ext)), stableId(portableGamePath))),
+        coverPath: toPortablePath(coverPath),
+        coverUpdatedAt: coverStats?.mtime?.toISOString() || "",
         format: ext.slice(1).toUpperCase(),
         size: formatBytes(stats.size),
         modified: stats.mtime.toISOString()
@@ -583,18 +794,17 @@ function findCoverPath(config, systemName, title, id) {
   const coverFolder = path.join(config.coverRoot, systems[systemName].folder);
   if (!fs.existsSync(coverFolder)) return "";
   const safeTitle = sanitizeFileName(title);
-  const candidates = [
-    `${title}.png`,
-    `${title}.jpg`,
-    `${title}.jpeg`,
-    `${safeTitle}.png`,
-    `${safeTitle}.jpg`,
-    `${safeTitle}.jpeg`,
-    `${id}.png`,
-    `${id}.jpg`,
-    `${id}.jpeg`
-  ].map((name) => path.join(coverFolder, name));
+  const baseNames = [...new Set([id, title, safeTitle].filter(Boolean))];
+  const candidates = baseNames.flatMap((baseName) => coverExtensions.map((extension) => path.join(coverFolder, `${baseName}.${extension}`)));
   return candidates.find((candidate) => fs.existsSync(candidate)) || "";
+}
+
+async function safeStat(filePath) {
+  try {
+    return await fsp.stat(filePath);
+  } catch {
+    return null;
+  }
 }
 
 async function walk(folder, depth = 0) {
@@ -719,41 +929,14 @@ async function saveArtworkFromUrl(gameId, imageUrl, source = {}) {
   if (!game) throw new Error("Pick a game before saving artwork.");
   if (!systems[game.system]) throw new Error(`Unsupported system: ${game.system}`);
 
-  const parsedUrl = new URL(imageUrl);
-  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-    throw new Error("Artwork URL must start with http or https.");
-  }
-
-  const response = await fetch(parsedUrl, {
-    redirect: "follow",
-    headers: {
-      "User-Agent": "GameRoom/0.1 artwork downloader"
-    }
-  });
-  if (!response.ok) throw new Error(`Artwork download failed: ${response.status}`);
-
-  const contentType = response.headers.get("content-type") || "";
-  if (!contentType.toLowerCase().startsWith("image/")) {
-    throw new Error("That URL did not return an image.");
-  }
-
-  const contentLength = Number(response.headers.get("content-length") || 0);
-  const maxBytes = 12 * 1024 * 1024;
-  if (contentLength > maxBytes) {
-    throw new Error("Artwork image is larger than 12 MB.");
-  }
-
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > maxBytes) {
-    throw new Error("Artwork image is larger than 12 MB.");
-  }
-
-  const extension = extensionForContentType(contentType) || extensionForUrl(parsedUrl) || "jpg";
+  const download = await downloadArtworkImage(imageUrl);
+  const extension = download.extension || "jpg";
   const coverFolder = path.join(config.coverRoot, systems[game.system].folder);
   await fsp.mkdir(coverFolder, { recursive: true });
 
-  const coverPath = path.join(coverFolder, `${sanitizeFileName(game.title)}.${extension}`);
-  await fsp.writeFile(coverPath, bytes);
+  await removeExistingCoverVersions(coverFolder, game.id);
+  const coverPath = path.join(coverFolder, `${game.id}.${extension}`);
+  await fsp.writeFile(coverPath, download.bytes);
 
   const metadataPath = path.join(config.metadataRoot, "artwork", `${game.id}.json`);
   await writeJson(metadataPath, {
@@ -766,17 +949,140 @@ async function saveArtworkFromUrl(gameId, imageUrl, source = {}) {
       sourceId: source.sourceId || "",
       title: source.title || "",
       itemUrl: source.itemUrl || "",
-      imageUrl
+      imageUrl: download.finalUrl,
+      originalUrl: imageUrl
     },
     savedAt: new Date().toISOString()
   });
 
   const updatedLibrary = await scanLibrary();
   return {
+    gameId: game.id,
     coverPath: toPortablePath(coverPath),
     library: updatedLibrary,
     state: await getState()
   };
+}
+
+async function downloadArtworkImage(imageUrl, depth = 0) {
+  if (depth > 3) throw new Error("Could not resolve that artwork URL to an image.");
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(imageUrl);
+  } catch {
+    throw new Error("Paste a full image URL that starts with http or https.");
+  }
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    throw new Error("Artwork URL must start with http or https.");
+  }
+
+  const wrappedImageUrl = extractWrappedImageUrl(parsedUrl);
+  if (wrappedImageUrl && wrappedImageUrl !== imageUrl) {
+    return downloadArtworkImage(wrappedImageUrl, depth + 1);
+  }
+
+  const response = await fetch(parsedUrl, {
+    redirect: "follow",
+    headers: {
+      "User-Agent": "GameRoom/0.1 artwork downloader",
+      Accept: "image/avif,image/webp,image/png,image/jpeg,image/gif,image/*,*/*;q=0.8"
+    }
+  });
+  if (!response.ok) throw new Error(`Artwork download failed: ${response.status}`);
+
+  const contentType = response.headers.get("content-type") || "";
+  const contentLength = Number(response.headers.get("content-length") || 0);
+  const maxImageBytes = 12 * 1024 * 1024;
+  const maxPageBytes = 3 * 1024 * 1024;
+
+  if (contentType.toLowerCase().startsWith("image/")) {
+    if (contentType.toLowerCase().startsWith("image/svg")) {
+      throw new Error("SVG artwork is not supported. Paste a jpg, png, webp, gif, or avif image URL.");
+    }
+    if (contentLength > maxImageBytes) throw new Error("Artwork image is larger than 12 MB.");
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > maxImageBytes) throw new Error("Artwork image is larger than 12 MB.");
+    const finalUrl = response.url || parsedUrl.toString();
+    return {
+      bytes,
+      finalUrl,
+      extension: extensionForContentType(contentType) || extensionForBytes(bytes) || extensionForUrl(new URL(finalUrl)) || "jpg"
+    };
+  }
+
+  const urlExtension = extensionForUrl(new URL(response.url || parsedUrl.toString()));
+  if (urlExtension && (!contentType || contentType === "application/octet-stream")) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > maxImageBytes) throw new Error("Artwork image is larger than 12 MB.");
+    return {
+      bytes,
+      finalUrl: response.url || parsedUrl.toString(),
+      extension: extensionForBytes(bytes) || urlExtension
+    };
+  }
+
+  if (contentLength > maxPageBytes) {
+    throw new Error("That URL opened a web page, not a direct image URL.");
+  }
+
+  const html = await response.text();
+  const pageImageUrl = extractImageUrlFromHtml(html, response.url || parsedUrl.toString());
+  if (pageImageUrl) return downloadArtworkImage(pageImageUrl, depth + 1);
+
+  throw new Error("That URL did not return an image. Open the image itself, copy its image address, then paste that URL.");
+}
+
+function extractWrappedImageUrl(parsedUrl) {
+  const params = ["imgurl", "mediaurl", "image_url", "image", "url", "u"];
+  for (const param of params) {
+    const value = parsedUrl.searchParams.get(param);
+    if (!value) continue;
+    try {
+      const nested = new URL(value);
+      if (["http:", "https:"].includes(nested.protocol)) return nested.toString();
+    } catch {
+      // Keep checking other wrapper params.
+    }
+  }
+  return "";
+}
+
+function extractImageUrlFromHtml(html, baseUrl) {
+  const patterns = [
+    /<meta\s+[^>]*(?:property|name)=["']og:image(?::secure_url)?["'][^>]*content=["']([^"']+)["'][^>]*>/i,
+    /<meta\s+[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["']og:image(?::secure_url)?["'][^>]*>/i,
+    /<meta\s+[^>]*(?:property|name)=["']twitter:image(?::src)?["'][^>]*content=["']([^"']+)["'][^>]*>/i,
+    /<link\s+[^>]*rel=["']image_src["'][^>]*href=["']([^"']+)["'][^>]*>/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (!match?.[1]) continue;
+    try {
+      const imageUrl = new URL(decodeHtmlEntities(match[1]), baseUrl);
+      if (["http:", "https:"].includes(imageUrl.protocol)) return imageUrl.toString();
+    } catch {
+      // Try the next metadata format.
+    }
+  }
+
+  return "";
+}
+
+function decodeHtmlEntities(value) {
+  return String(value)
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#039;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+async function removeExistingCoverVersions(coverFolder, gameId) {
+  await Promise.all(
+    coverExtensions.map((extension) => fsp.rm(path.join(coverFolder, `${gameId}.${extension}`), { force: true }))
+  );
 }
 
 async function openGoogleImagesForGame(gameId) {
@@ -812,14 +1118,26 @@ function extensionForContentType(contentType) {
     "image/jpeg": "jpg",
     "image/jpg": "jpg",
     "image/png": "png",
-    "image/webp": "webp"
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/avif": "avif"
   };
   return map[type] || "";
 }
 
 function extensionForUrl(parsedUrl) {
   const ext = path.extname(parsedUrl.pathname).toLowerCase().replace(".", "");
-  return ["jpg", "jpeg", "png", "webp"].includes(ext) ? (ext === "jpeg" ? "jpg" : ext) : "";
+  return coverExtensions.includes(ext) ? (ext === "jpeg" ? "jpg" : ext) : "";
+}
+
+function extensionForBytes(bytes) {
+  if (!bytes || bytes.length < 12) return "";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpg";
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "png";
+  if (bytes.slice(0, 6).toString("ascii") === "GIF87a" || bytes.slice(0, 6).toString("ascii") === "GIF89a") return "gif";
+  if (bytes.slice(8, 12).toString("ascii") === "WEBP") return "webp";
+  if (bytes.slice(4, 12).toString("ascii").includes("ftypavif")) return "avif";
+  return "";
 }
 
 async function healthCheck(config, profiles) {
@@ -996,6 +1314,27 @@ async function launchGame(gameId) {
   return { game: launchGameInfo, command, args };
 }
 
+async function openEmulator(systemName) {
+  const rawConfig = await readJson(configPath, createDefaultConfig());
+  const profiles = normalizeProfiles(await readJson(emulatorProfilesPath, {}), rawConfig.rootDir);
+  const profile = profiles[systemName];
+  if (!profile) throw new Error(`Unknown system: ${systemName}`);
+
+  const command = prepareLaunchCommand(profile.command, profile.emulator);
+  const child = spawn(command, [], {
+    cwd: rootDir,
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true
+  });
+  await new Promise((resolve, reject) => {
+    child.once("spawn", resolve);
+    child.once("error", (error) => reject(new Error(`Could not open ${profile.emulator}: ${error.message}`)));
+  });
+  child.unref();
+  return { system: systemName, emulator: profile.emulator, command };
+}
+
 async function snapshotSaves(reason = "manual", game = null) {
   const config = normalizeConfig(await readJson(configPath, createDefaultConfig()));
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -1141,11 +1480,13 @@ ipcMain.handle("controllers:get", getControllerState);
 ipcMain.handle("controllers:save", (_event, nextState) => saveControllerState(nextState));
 ipcMain.handle("controllers:system", getSystemControllers);
 ipcMain.handle("controllers:open-bluetooth", openBluetoothSettings);
+ipcMain.handle("controllers:apply-universal", (_event, controller) => applyUniversalControllerSetup(controller));
 ipcMain.handle("artwork:search-archive", (_event, gameId) => searchArchiveArtwork(gameId));
 ipcMain.handle("artwork:save-url", (_event, gameId, imageUrl, source) => saveArtworkFromUrl(gameId, imageUrl, source));
 ipcMain.handle("artwork:open-google-images", (_event, gameId) => openGoogleImagesForGame(gameId));
 ipcMain.handle("library:scan", scanLibrary);
 ipcMain.handle("game:launch", (_event, gameId) => launchGame(gameId));
+ipcMain.handle("emulator:open", (_event, systemName) => openEmulator(systemName));
 ipcMain.handle("saves:snapshot", () => snapshotSaves("manual"));
 ipcMain.handle("bios:import-batocera", importBatoceraBios);
 ipcMain.handle("games:import", (_event, files, systemName) => importGameFiles(files, systemName));

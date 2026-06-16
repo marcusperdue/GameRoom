@@ -112,8 +112,9 @@ p {
 }
 
 .brand {
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
+  padding-top: 2px;
 }
 
 .brand-mark {
@@ -134,7 +135,7 @@ p {
 }
 
 .brand h1 {
-  font-size: 22px;
+  font-size: 26px;
   line-height: 1;
 }
 
@@ -155,6 +156,9 @@ p {
 .controller-card p,
 .controller-empty p,
 .controller-empty small,
+.controller-apply p,
+.controller-setup-card p,
+.controller-setup-card small,
 .input-empty p,
 .input-device p,
 .controller-notes span,
@@ -286,7 +290,8 @@ input {
 }
 
 .quick-dock span,
-.actions span,
+.actions .action-icon,
+.hero-play .action-icon,
 .detail-actions span {
   display: grid;
   place-items: center;
@@ -297,6 +302,55 @@ input {
   background: rgba(56, 217, 130, 0.15);
   color: var(--green);
   font-weight: 950;
+}
+
+.actions .action-label {
+  min-width: 0;
+}
+
+.action-icon {
+  line-height: 1;
+}
+
+.plus-icon {
+  position: relative;
+  font-size: 0;
+}
+
+.plus-icon::before,
+.plus-icon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.plus-icon::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.scan-icon {
+  font-size: 16px;
+}
+
+#scanButton.scanning .scan-icon {
+  animation: spin 780ms linear infinite;
+}
+
+#scanButton:disabled {
+  cursor: default;
+  opacity: 0.78;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .stage {
@@ -348,8 +402,10 @@ input {
 #guideCloseButton,
 #controllerCloseButton,
 #controllerRefreshButton,
+#controllerApplyButton,
 .controller-card button,
 .controller-empty button,
+.controller-setup-card button,
 .artwork-toolbar button,
 #artworkCloseButton,
 #artworkUrlSaveButton,
@@ -611,6 +667,7 @@ input {
 
 .game-shelf {
   display: flex;
+  align-items: flex-start;
   gap: 12px;
   min-width: 0;
   min-height: 0;
@@ -626,11 +683,11 @@ input {
 
 .game-card {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: 188px auto;
   gap: 9px;
   flex: 0 0 134px;
   min-width: 0;
-  height: 100%;
+  height: auto;
   min-height: 0;
   padding: 0;
   border: 0;
@@ -643,6 +700,7 @@ input {
   position: relative;
   display: grid;
   place-items: center;
+  aspect-ratio: 2 / 3;
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -979,6 +1037,45 @@ input {
   white-space: nowrap;
 }
 
+.controller-apply {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(80, 167, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(80, 167, 255, 0.065);
+}
+
+.controller-apply div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.controller-apply strong,
+.controller-apply p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#controllerApplyButton {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 13px;
+  border-color: rgba(56, 217, 130, 0.35);
+  background: rgba(56, 217, 130, 0.14);
+  color: var(--green);
+}
+
+#controllerApplyButton:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .controller-layout {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
@@ -1088,6 +1185,77 @@ input {
 .input-empty.ready {
   border-color: rgba(56, 217, 130, 0.34);
   background: rgba(56, 217, 130, 0.07);
+}
+
+.controller-empty.compact {
+  padding: 12px;
+}
+
+.controller-setup-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.controller-setup-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.controller-setup-card > span {
+  display: grid;
+  place-items: center;
+  min-width: 58px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  color: #d8e4ee;
+  font-size: 11px;
+  font-weight: 950;
+}
+
+.controller-setup-card.applied > span {
+  background: var(--green);
+  color: #06120c;
+}
+
+.controller-setup-card.saved > span,
+.controller-setup-card.needsReview > span {
+  background: rgba(80, 167, 255, 0.2);
+  color: #a9d4ff;
+}
+
+.controller-setup-card.missing > span {
+  background: rgba(244, 199, 93, 0.2);
+  color: var(--yellow);
+}
+
+.controller-setup-card div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.controller-setup-card strong,
+.controller-setup-card p,
+.controller-setup-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controller-setup-card button {
+  min-height: 32px;
+  padding: 0 10px;
 }
 
 .controller-test {
@@ -1503,6 +1671,7 @@ input {
   .guide-sheet header,
   .controller-sheet header,
   .artwork-sheet header,
+  .controller-apply,
   .panel-head {
     align-items: stretch;
     flex-direction: column;
@@ -1525,6 +1694,7 @@ input {
   .guide-table div,
   .controller-layout,
   .controller-notes,
+  .controller-setup-list,
   .artwork-results,
   .manual-artwork {
     grid-template-columns: 1fr;

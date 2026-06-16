@@ -101,30 +101,6 @@ p {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 44%), var(--sidebar);
 }
 
-.window-dots {
-  display: flex;
-  gap: 8px;
-  height: 14px;
-}
-
-.window-dots span {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-
-.window-dots span:nth-child(1) {
-  background: #ff625f;
-}
-
-.window-dots span:nth-child(2) {
-  background: #ffc14f;
-}
-
-.window-dots span:nth-child(3) {
-  background: #2cc95d;
-}
-
 .brand,
 .actions,
 .system-card,

@@ -11,6 +11,8 @@ let applyingControllerProfile = false;
 let coverCacheVersion = Date.now();
 let operationCounter = 0;
 const activeOperations = new Map();
+let mappingSession = null;
+let mappingPollTimer = null;
 
 const systemNav = document.querySelector("#systemNav");
 const gameList = document.querySelector("#gameList");
@@ -36,11 +38,13 @@ const guideTable = document.querySelector("#guideTable");
 const controllerOverlay = document.querySelector("#controllerOverlay");
 const controllerCloseButton = document.querySelector("#controllerCloseButton");
 const controllerRefreshButton = document.querySelector("#controllerRefreshButton");
+const controllerMapButton = document.querySelector("#controllerMapButton");
 const controllerApplyButton = document.querySelector("#controllerApplyButton");
 const controllerSummary = document.querySelector("#controllerSummary");
 const controllerList = document.querySelector("#controllerList");
 const controllerTest = document.querySelector("#controllerTest");
 const controllerSetupList = document.querySelector("#controllerSetupList");
+const controllerMapper = document.querySelector("#controllerMapper");
 const artworkOverlay = document.querySelector("#artworkOverlay");
 const artworkCloseButton = document.querySelector("#artworkCloseButton");
 const artworkSelected = document.querySelector("#artworkSelected");
@@ -73,6 +77,29 @@ const guideSystems = [
   "NintendoDS",
   "PS1",
   "PSP"
+];
+
+const mappingSteps = [
+  { path: "face.south", label: "A / Cross", hint: "Press the bottom face button.", type: "button" },
+  { path: "face.east", label: "B / Circle", hint: "Press the right face button.", type: "button" },
+  { path: "face.west", label: "X / Square", hint: "Press the left face button.", type: "button" },
+  { path: "face.north", label: "Y / Triangle", hint: "Press the top face button.", type: "button" },
+  { path: "shoulders.left", label: "L / LB", hint: "Press the left shoulder.", type: "button" },
+  { path: "shoulders.right", label: "R / RB", hint: "Press the right shoulder.", type: "button" },
+  { path: "triggers.left", label: "LT / L2", hint: "Press or pull the left trigger.", type: "button", allowAxis: true },
+  { path: "triggers.right", label: "RT / R2", hint: "Press or pull the right trigger.", type: "button", allowAxis: true },
+  { path: "menu.back", label: "Select / Back", hint: "Press select, share, or back.", type: "button" },
+  { path: "menu.start", label: "Start / Options", hint: "Press start, menu, or options.", type: "button" },
+  { path: "dpad.up", label: "D-pad Up", hint: "Press up on the d-pad.", type: "button", allowAxis: true },
+  { path: "dpad.down", label: "D-pad Down", hint: "Press down on the d-pad.", type: "button", allowAxis: true },
+  { path: "dpad.left", label: "D-pad Left", hint: "Press left on the d-pad.", type: "button", allowAxis: true },
+  { path: "dpad.right", label: "D-pad Right", hint: "Press right on the d-pad.", type: "button", allowAxis: true },
+  { path: "sticks.leftPress", label: "Left Stick Click", hint: "Click the left stick.", type: "button" },
+  { path: "sticks.rightPress", label: "Right Stick Click", hint: "Click the right stick.", type: "button" },
+  { path: "axes.leftX", label: "Left Stick Right", hint: "Move the left stick to the right.", type: "axis" },
+  { path: "axes.leftY", label: "Left Stick Up", hint: "Move the left stick up.", type: "axis" },
+  { path: "axes.rightX", label: "Right Stick Right", hint: "Move the right stick to the right.", type: "axis" },
+  { path: "axes.rightY", label: "Right Stick Up", hint: "Move the right stick up.", type: "axis" }
 ];
 
 async function boot() {
@@ -568,8 +595,113 @@ function summarizeControllerDevice(device) {
     source: device.source || "",
     transport: device.transport || "",
     live: Boolean(device.live),
+    standardMap: standardMapForDevice(device),
     updatedAt: new Date().toISOString()
   };
+}
+
+function defaultStandardMap() {
+  return {
+    face: {
+      south: buttonBinding(0),
+      east: buttonBinding(1),
+      west: buttonBinding(2),
+      north: buttonBinding(3)
+    },
+    shoulders: {
+      left: buttonBinding(4),
+      right: buttonBinding(5)
+    },
+    triggers: {
+      left: buttonBinding(6),
+      right: buttonBinding(7)
+    },
+    menu: {
+      back: buttonBinding(8),
+      start: buttonBinding(9),
+      home: buttonBinding(16)
+    },
+    sticks: {
+      leftPress: buttonBinding(10),
+      rightPress: buttonBinding(11)
+    },
+    dpad: {
+      up: buttonBinding(12),
+      down: buttonBinding(13),
+      left: buttonBinding(14),
+      right: buttonBinding(15)
+    },
+    axes: {
+      leftX: axisBinding(0, 1),
+      leftY: axisBinding(1, -1),
+      rightX: axisBinding(2, 1),
+      rightY: axisBinding(3, -1)
+    }
+  };
+}
+
+function standardMapForDevice(device = null) {
+  if (mappingSession?.deviceId && device?.id === mappingSession.deviceId) return cloneMap(mappingSession.map);
+  const saved = controllerState?.universalProfile;
+  if (sameControllerIdentity(device, saved?.controller) && saved.standardMap) return normalizeStandardMap(saved.standardMap);
+  return defaultStandardMap();
+}
+
+function sameControllerIdentity(device = null, savedController = null) {
+  if (!device || !savedController) return false;
+  if (device.id && savedController.id && device.id === savedController.id) return true;
+  const deviceName = cleanControllerName(device.name);
+  const savedName = cleanControllerName(savedController.name || savedController.id);
+  return Boolean(deviceName && savedName && deviceName === savedName);
+}
+
+function normalizeStandardMap(map = {}) {
+  const defaults = defaultStandardMap();
+  const next = cloneMap(defaults);
+  for (const step of mappingSteps) {
+    const binding = normalizeBinding(getPath(map, step.path), getPath(defaults, step.path), step.type);
+    setPath(next, step.path, binding);
+  }
+  return next;
+}
+
+function normalizeBinding(binding, fallback, type = "button") {
+  if (Number.isInteger(binding)) return type === "axis" ? axisBinding(binding, fallback?.direction || 1) : buttonBinding(binding);
+  if (!binding || typeof binding !== "object") return cloneMap(fallback);
+  if (binding.type === "axis" || type === "axis") {
+    const index = Number.isInteger(binding.index) ? binding.index : fallback?.index || 0;
+    const direction = binding.direction === undefined ? fallback?.direction || 1 : Number(binding.direction) < 0 ? -1 : 1;
+    return axisBinding(index, direction);
+  }
+  const index = Number.isInteger(binding.index) ? binding.index : fallback?.index || 0;
+  return buttonBinding(index);
+}
+
+function buttonBinding(index) {
+  return { type: "button", index, label: `Button ${index}` };
+}
+
+function axisBinding(index, direction = 1) {
+  const sign = direction < 0 ? -1 : 1;
+  return { type: "axis", index, direction: sign, label: `Axis ${index + 1}${sign > 0 ? "+" : "-"}` };
+}
+
+function cloneMap(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function getPath(source, pathName) {
+  return pathName.split(".").reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : undefined), source);
+}
+
+function setPath(target, pathName, value) {
+  const keys = pathName.split(".");
+  let cursor = target;
+  for (const key of keys.slice(0, -1)) {
+    cursor[key] = cursor[key] || {};
+    cursor = cursor[key];
+  }
+  cursor[keys[keys.length - 1]] = value;
 }
 
 function activeController(devices = controllerDevices()) {
@@ -604,6 +736,8 @@ function renderControllerCenter() {
   </div>`;
 
   renderControllerSetupList();
+  renderControllerMapper(selected);
+  controllerMapButton.disabled = !selected?.live || Boolean(mappingSession?.active);
   controllerApplyButton.disabled = applyingControllerProfile || !isReady;
   if (applyingControllerProfile) {
     setButtonLoading(controllerApplyButton, true, "Applying");
@@ -611,6 +745,92 @@ function renderControllerCenter() {
     setButtonLoading(controllerApplyButton, false);
     controllerApplyButton.disabled = !isReady;
   }
+}
+
+function renderControllerMapper(selected) {
+  if (!controllerMapper) return;
+  if (!selected?.live) {
+    controllerMapper.innerHTML = `<div class="mapper-empty">
+      <strong>Live input needed for button mapping</strong>
+      <p>GameRoom can see this controller at the OS level, but the button mapper needs live input. Press a button, reconnect by USB, or pair Bluetooth again.</p>
+    </div>`;
+    return;
+  }
+
+  if (mappingSession?.active && mappingSession.deviceId === selected.id) {
+    controllerMapper.innerHTML = renderActiveMappingSession();
+    return;
+  }
+
+  const saved = controllerState?.universalProfile;
+  const savedForDevice = sameControllerIdentity(selected, saved?.controller);
+  controllerMapper.innerHTML = `<div class="mapper-ready ${savedForDevice ? "saved" : ""}">
+    <div>
+      <strong>${savedForDevice ? "Universal mapping saved" : "Map this controller"}</strong>
+      <p>${savedForDevice ? `${escapeHtml(saved.controller.name)} is ready. Remap anytime, or apply it to emulators.` : "Press each button once, like Dolphin or melonDS setup."}</p>
+    </div>
+    <button data-mapping-action="start" type="button">${savedForDevice ? "Remap" : "Start Mapping"}</button>
+  </div>`;
+}
+
+function renderActiveMappingSession() {
+  const step = mappingSteps[mappingSession.stepIndex];
+  const complete = mappingSession.stepIndex >= mappingSteps.length;
+  const percent = Math.round((mappingSession.stepIndex / mappingSteps.length) * 100);
+  const stepList = mappingSteps.map((item, index) => {
+    const binding = getPath(mappingSession.map, item.path);
+    const status = index < mappingSession.stepIndex ? "done" : index === mappingSession.stepIndex ? "active" : "";
+    return `<li class="${status}">
+      <span>${escapeHtml(item.label)}</span>
+      <small>${escapeHtml(bindingLabel(binding))}</small>
+    </li>`;
+  }).join("");
+
+  if (complete) {
+    return `<div class="mapper-session complete">
+      <div class="mapper-head">
+        <div>
+          <strong>Mapping complete</strong>
+          <p>Save this as the universal GameRoom controller profile.</p>
+        </div>
+        <span>${mappingSteps.length}/${mappingSteps.length}</span>
+      </div>
+      <div class="mapping-progress"><i style="width:100%"></i></div>
+      <ol class="mapping-list">${stepList}</ol>
+      <div class="mapper-actions">
+        <button data-mapping-action="save" type="button">Save Mapping</button>
+        <button data-mapping-action="restart" type="button">Start Over</button>
+        <button data-mapping-action="cancel" type="button">Cancel</button>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="mapper-session">
+    <div class="mapper-head">
+      <div>
+        <strong>${escapeHtml(step.label)}</strong>
+        <p>${escapeHtml(step.hint)}</p>
+      </div>
+      <span>${mappingSession.stepIndex + 1}/${mappingSteps.length}</span>
+    </div>
+    <div class="mapping-progress"><i style="width:${percent}%"></i></div>
+    <div class="mapping-prompt">
+      <span>${escapeHtml(step.type === "axis" ? "Move" : "Press")}</span>
+      <strong>${escapeHtml(step.label)}</strong>
+    </div>
+    <ol class="mapping-list">${stepList}</ol>
+    <div class="mapper-actions">
+      <button data-mapping-action="skip" type="button">Skip</button>
+      <button data-mapping-action="back" type="button" ${mappingSession.stepIndex === 0 ? "disabled" : ""}>Back</button>
+      <button data-mapping-action="cancel" type="button">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function bindingLabel(binding) {
+  if (!binding) return "Not set";
+  if (binding.type === "axis") return `Axis ${binding.index + 1}${binding.direction > 0 ? "+" : "-"}`;
+  return `Button ${binding.index}`;
 }
 
 function controllerWaitingTitle(paired) {
@@ -718,6 +938,159 @@ function renderSystemInputFallback(device) {
   </div>`;
 }
 
+function startMappingSession() {
+  const device = activeController();
+  if (!device?.live) {
+    showToast("Live controller input is needed for button mapping");
+    return;
+  }
+
+  mappingSession = {
+    active: true,
+    deviceId: device.id,
+    deviceName: device.name,
+    stepIndex: 0,
+    map: standardMapForDevice(device),
+    baseline: inputSnapshot(device.gamepad),
+    waitUntil: performance.now() + 450
+  };
+  startMappingPolling();
+  renderControllerCenter();
+}
+
+function cancelMappingSession() {
+  mappingSession = null;
+  stopMappingPolling();
+  renderControllerCenter();
+}
+
+function restartMappingSession() {
+  mappingSession = null;
+  startMappingSession();
+}
+
+function skipMappingStep() {
+  if (!mappingSession?.active) return;
+  mappingSession.stepIndex = Math.min(mappingSession.stepIndex + 1, mappingSteps.length);
+  const device = controllerDevices().find((item) => item.id === mappingSession.deviceId);
+  mappingSession.baseline = device?.gamepad ? inputSnapshot(device.gamepad) : { buttons: [], axes: [] };
+  mappingSession.waitUntil = performance.now() + 350;
+  if (mappingSession.stepIndex >= mappingSteps.length) stopMappingPolling();
+  renderControllerCenter();
+}
+
+function previousMappingStep() {
+  if (!mappingSession?.active) return;
+  mappingSession.stepIndex = Math.max(mappingSession.stepIndex - 1, 0);
+  const device = controllerDevices().find((item) => item.id === mappingSession.deviceId);
+  mappingSession.baseline = device?.gamepad ? inputSnapshot(device.gamepad) : { buttons: [], axes: [] };
+  mappingSession.waitUntil = performance.now() + 350;
+  startMappingPolling();
+  renderControllerCenter();
+}
+
+async function saveMappingSession(button = null) {
+  if (!mappingSession?.active) return;
+  const device = controllerDevices().find((item) => item.id === mappingSession.deviceId);
+  if (!device) {
+    showToast("Controller disconnected before mapping could be saved");
+    return;
+  }
+
+  const controller = {
+    ...summarizeControllerDevice(device),
+    standardMap: normalizeStandardMap(mappingSession.map)
+  };
+  controllerState = await withLoading(button, {
+    buttonLabel: "Saving",
+    status: "Saving controller mapping"
+  }, () => window.gameRoom.saveControllers({
+    defaultController: controller.id,
+    profiles: {
+      ...(controllerState?.profiles || {}),
+      [controller.id]: controller
+    },
+    universalProfile: {
+      version: 1,
+      appliedAt: new Date().toISOString(),
+      controller,
+      standardMap: controller.standardMap
+    }
+  }));
+  mappingSession = null;
+  stopMappingPolling();
+  renderControllerCenter();
+  showToast("Universal controller mapping saved");
+}
+
+function startMappingPolling() {
+  if (mappingPollTimer) return;
+  mappingPollTimer = window.setInterval(processMappingInput, 55);
+}
+
+function stopMappingPolling() {
+  if (!mappingPollTimer) return;
+  window.clearInterval(mappingPollTimer);
+  mappingPollTimer = null;
+}
+
+function processMappingInput() {
+  if (!mappingSession?.active || mappingSession.stepIndex >= mappingSteps.length) {
+    stopMappingPolling();
+    return;
+  }
+
+  const device = controllerDevices().find((item) => item.id === mappingSession.deviceId);
+  if (!device?.gamepad) return;
+  if (performance.now() < mappingSession.waitUntil) return;
+
+  const step = mappingSteps[mappingSession.stepIndex];
+  const detected = detectMappingInput(device.gamepad, step, mappingSession.baseline);
+  if (!detected) return;
+
+  setPath(mappingSession.map, step.path, detected);
+  mappingSession.stepIndex += 1;
+  mappingSession.baseline = inputSnapshot(device.gamepad);
+  mappingSession.waitUntil = performance.now() + 420;
+  if (mappingSession.stepIndex >= mappingSteps.length) stopMappingPolling();
+  renderControllerCenter();
+}
+
+function inputSnapshot(gamepad) {
+  return {
+    buttons: gamepad.buttons.map((button) => Number(button.value || 0)),
+    axes: gamepad.axes.map((axis) => Number(axis || 0))
+  };
+}
+
+function detectMappingInput(gamepad, step, baseline) {
+  if (step.type === "axis") return detectAxisInput(gamepad, baseline);
+  return detectButtonInput(gamepad, baseline) || (step.allowAxis ? detectAxisInput(gamepad, baseline) : null);
+}
+
+function detectButtonInput(gamepad, baseline) {
+  for (let index = 0; index < gamepad.buttons.length; index += 1) {
+    const value = Number(gamepad.buttons[index]?.value || 0);
+    const base = Number(baseline.buttons[index] || 0);
+    if (value > 0.55 && value - base > 0.35) return buttonBinding(index);
+  }
+  return null;
+}
+
+function detectAxisInput(gamepad, baseline) {
+  let best = null;
+  for (let index = 0; index < gamepad.axes.length; index += 1) {
+    const value = Number(gamepad.axes[index] || 0);
+    const base = Number(baseline.axes[index] || 0);
+    const delta = value - base;
+    if (Math.abs(delta) > 0.55 && Math.abs(value) > 0.45) {
+      if (!best || Math.abs(delta) > Math.abs(best.delta)) best = { index, delta };
+    }
+  }
+
+  return best ? axisBinding(best.index, best.delta >= 0 ? 1 : -1) : null;
+}
+
 async function refreshSystemControllers() {
   try {
     systemControllerState = await window.gameRoom.getSystemControllers();
@@ -778,6 +1151,7 @@ function closeControllerCenter() {
   controllerOverlay.classList.remove("show");
   controllerOverlay.setAttribute("aria-hidden", "true");
   stopControllerPolling();
+  stopMappingPolling();
 }
 
 function startControllerPolling() {
@@ -1145,6 +1519,8 @@ guideOverlay.addEventListener("click", async (event) => {
 
 controllerCloseButton.addEventListener("click", closeControllerCenter);
 
+controllerMapButton.addEventListener("click", startMappingSession);
+
 controllerApplyButton.addEventListener("click", applyUniversalControllerSetup);
 
 controllerRefreshButton.addEventListener("click", async () => {
@@ -1196,6 +1572,18 @@ controllerOverlay.addEventListener("click", async (event) => {
     } catch (error) {
       showToast(userErrorMessage(error));
     }
+    return;
+  }
+
+  const mappingButton = event.target.closest("[data-mapping-action]");
+  if (mappingButton) {
+    const action = mappingButton.dataset.mappingAction;
+    if (action === "start") startMappingSession();
+    if (action === "restart") restartMappingSession();
+    if (action === "skip") skipMappingStep();
+    if (action === "back") previousMappingStep();
+    if (action === "cancel") cancelMappingSession();
+    if (action === "save") await saveMappingSession(mappingButton);
     return;
   }
 
@@ -1281,6 +1669,11 @@ window.addEventListener("gamepadconnected", async (event) => {
 
 window.addEventListener("gamepaddisconnected", async (event) => {
   await refreshSystemControllers();
+  if (mappingSession?.deviceId === `gamepad:${event.gamepad.index}:${event.gamepad.id}`) {
+    mappingSession = null;
+    stopMappingPolling();
+    showToast("Controller disconnected. Mapping canceled.");
+  }
   await rememberConnectedControllers();
   renderControllerCenter();
   showToast(`Controller disconnected: ${cleanControllerName(event.gamepad.id)}`);

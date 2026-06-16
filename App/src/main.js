@@ -564,16 +564,120 @@ function createUniversalControllerProfile(controller = {}) {
       axes: Number.isInteger(controller.axes) ? controller.axes : 0,
       live: Boolean(controller.live)
     },
-    standardMap: {
-      face: { south: 0, east: 1, west: 2, north: 3 },
-      shoulders: { left: 4, right: 5 },
-      triggers: { left: 6, right: 7 },
-      menu: { back: 8, start: 9, home: 16 },
-      sticks: { leftPress: 10, rightPress: 11 },
-      dpad: { up: 12, down: 13, left: 14, right: 15 },
-      axes: { leftX: 0, leftY: 1, rightX: 2, rightY: 3 }
+    standardMap: normalizeStandardMap(controller.standardMap)
+  };
+}
+
+function defaultStandardMap() {
+  return {
+    face: {
+      south: buttonBinding(0),
+      east: buttonBinding(1),
+      west: buttonBinding(2),
+      north: buttonBinding(3)
+    },
+    shoulders: {
+      left: buttonBinding(4),
+      right: buttonBinding(5)
+    },
+    triggers: {
+      left: buttonBinding(6),
+      right: buttonBinding(7)
+    },
+    menu: {
+      back: buttonBinding(8),
+      start: buttonBinding(9),
+      home: buttonBinding(16)
+    },
+    sticks: {
+      leftPress: buttonBinding(10),
+      rightPress: buttonBinding(11)
+    },
+    dpad: {
+      up: buttonBinding(12),
+      down: buttonBinding(13),
+      left: buttonBinding(14),
+      right: buttonBinding(15)
+    },
+    axes: {
+      leftX: axisBinding(0, 1),
+      leftY: axisBinding(1, -1),
+      rightX: axisBinding(2, 1),
+      rightY: axisBinding(3, -1)
     }
   };
+}
+
+function normalizeStandardMap(map = {}) {
+  const defaults = defaultStandardMap();
+  const next = cloneJson(defaults);
+  const paths = [
+    ["face.south", "button"],
+    ["face.east", "button"],
+    ["face.west", "button"],
+    ["face.north", "button"],
+    ["shoulders.left", "button"],
+    ["shoulders.right", "button"],
+    ["triggers.left", "button"],
+    ["triggers.right", "button"],
+    ["menu.back", "button"],
+    ["menu.start", "button"],
+    ["menu.home", "button"],
+    ["sticks.leftPress", "button"],
+    ["sticks.rightPress", "button"],
+    ["dpad.up", "button"],
+    ["dpad.down", "button"],
+    ["dpad.left", "button"],
+    ["dpad.right", "button"],
+    ["axes.leftX", "axis"],
+    ["axes.leftY", "axis"],
+    ["axes.rightX", "axis"],
+    ["axes.rightY", "axis"]
+  ];
+
+  for (const [pathName, type] of paths) {
+    setPath(next, pathName, normalizeBinding(getPath(map, pathName), getPath(defaults, pathName), type));
+  }
+  return next;
+}
+
+function normalizeBinding(binding, fallback, type = "button") {
+  if (Number.isInteger(binding)) return type === "axis" ? axisBinding(binding, fallback?.direction || 1) : buttonBinding(binding);
+  if (!binding || typeof binding !== "object") return cloneJson(fallback);
+  if (binding.type === "axis" || type === "axis") {
+    const index = Number.isInteger(binding.index) ? binding.index : fallback?.index || 0;
+    const direction = binding.direction === undefined ? fallback?.direction || 1 : Number(binding.direction) < 0 ? -1 : 1;
+    return axisBinding(index, direction);
+  }
+  const index = Number.isInteger(binding.index) ? binding.index : fallback?.index || 0;
+  return buttonBinding(index);
+}
+
+function buttonBinding(index) {
+  return { type: "button", index, label: `Button ${index}` };
+}
+
+function axisBinding(index, direction = 1) {
+  const sign = direction < 0 ? -1 : 1;
+  return { type: "axis", index, direction: sign, label: `Axis ${index + 1}${sign > 0 ? "+" : "-"}` };
+}
+
+function getPath(source, pathName) {
+  return pathName.split(".").reduce((acc, key) => (acc && acc[key] !== undefined ? acc[key] : undefined), source);
+}
+
+function setPath(target, pathName, value) {
+  const keys = pathName.split(".");
+  let cursor = target;
+  for (const key of keys.slice(0, -1)) {
+    cursor[key] = cursor[key] || {};
+    cursor = cursor[key];
+  }
+  cursor[keys[keys.length - 1]] = value;
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 async function writeDolphinControllerSetup(config, controllerProfile) {
@@ -582,7 +686,7 @@ async function writeDolphinControllerSetup(config, controllerProfile) {
   const outputFolder = path.join(config.controlsRoot, emulator);
   await fsp.mkdir(outputFolder, { recursive: true });
 
-  const gcPadText = dolphinGameCubePadIni(controllerProfile.controller.name);
+  const gcPadText = dolphinGameCubePadIni(controllerProfile);
   const gcPadTemplate = path.join(outputFolder, "GCPadNew.ini");
   await fsp.writeFile(gcPadTemplate, gcPadText);
 
@@ -651,33 +755,34 @@ function dolphinConfigFolder() {
   return path.join(os.homedir(), ".config", "dolphin-emu");
 }
 
-function dolphinGameCubePadIni(controllerName) {
-  const device = `SDL/0/${dolphinSafeDeviceName(controllerName)}`;
+function dolphinGameCubePadIni(controllerProfile) {
+  const device = `SDL/0/${dolphinSafeDeviceName(controllerProfile.controller.name)}`;
+  const map = normalizeStandardMap(controllerProfile.standardMap);
   return [
     "[GCPad1]",
     `Device = ${device}`,
-    "Buttons/A = `Button 0`",
-    "Buttons/B = `Button 1`",
-    "Buttons/X = `Button 2`",
-    "Buttons/Y = `Button 3`",
-    "Buttons/Z = `Button 5`",
-    "Buttons/Start = `Button 9`",
-    "Main Stick/Up = `Axis 1-`",
-    "Main Stick/Down = `Axis 1+`",
-    "Main Stick/Left = `Axis 0-`",
-    "Main Stick/Right = `Axis 0+`",
+    `Buttons/A = ${dolphinBinding(map.face.south)}`,
+    `Buttons/B = ${dolphinBinding(map.face.east)}`,
+    `Buttons/X = ${dolphinBinding(map.face.west)}`,
+    `Buttons/Y = ${dolphinBinding(map.face.north)}`,
+    `Buttons/Z = ${dolphinBinding(map.shoulders.right)}`,
+    `Buttons/Start = ${dolphinBinding(map.menu.start)}`,
+    `Main Stick/Up = ${dolphinAxis(map.axes.leftY, 1)}`,
+    `Main Stick/Down = ${dolphinAxis(map.axes.leftY, -1)}`,
+    `Main Stick/Left = ${dolphinAxis(map.axes.leftX, -1)}`,
+    `Main Stick/Right = ${dolphinAxis(map.axes.leftX, 1)}`,
     "Main Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42",
-    "C-Stick/Up = `Axis 3-`",
-    "C-Stick/Down = `Axis 3+`",
-    "C-Stick/Left = `Axis 2-`",
-    "C-Stick/Right = `Axis 2+`",
+    `C-Stick/Up = ${dolphinAxis(map.axes.rightY, 1)}`,
+    `C-Stick/Down = ${dolphinAxis(map.axes.rightY, -1)}`,
+    `C-Stick/Left = ${dolphinAxis(map.axes.rightX, -1)}`,
+    `C-Stick/Right = ${dolphinAxis(map.axes.rightX, 1)}`,
     "C-Stick/Calibration = 100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42",
-    "Triggers/L = `Button 6`",
-    "Triggers/R = `Button 7`",
-    "D-Pad/Up = `Button 12`",
-    "D-Pad/Down = `Button 13`",
-    "D-Pad/Left = `Button 14`",
-    "D-Pad/Right = `Button 15`",
+    `Triggers/L = ${dolphinBinding(map.triggers.left)}`,
+    `Triggers/R = ${dolphinBinding(map.triggers.right)}`,
+    `D-Pad/Up = ${dolphinBinding(map.dpad.up)}`,
+    `D-Pad/Down = ${dolphinBinding(map.dpad.down)}`,
+    `D-Pad/Left = ${dolphinBinding(map.dpad.left)}`,
+    `D-Pad/Right = ${dolphinBinding(map.dpad.right)}`,
     "[GCPad2]",
     "Device =",
     "[GCPad3]",
@@ -686,6 +791,18 @@ function dolphinGameCubePadIni(controllerName) {
     "Device =",
     ""
   ].join("\n");
+}
+
+function dolphinBinding(binding) {
+  if (binding?.type === "axis") return dolphinAxis(binding, 1);
+  const index = Number.isInteger(binding?.index) ? binding.index : 0;
+  return `\`Button ${index}\``;
+}
+
+function dolphinAxis(binding, multiplier = 1) {
+  const index = Number.isInteger(binding?.index) ? binding.index : 0;
+  const direction = (Number(binding?.direction) < 0 ? -1 : 1) * multiplier;
+  return `\`Axis ${index}${direction > 0 ? "+" : "-"}\``;
 }
 
 function dolphinSafeDeviceName(name) {

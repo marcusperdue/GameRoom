@@ -452,6 +452,7 @@ button.is-loading .button-spinner {
 #guideCloseButton,
 #controllerCloseButton,
 #controllerRefreshButton,
+#controllerMapButton,
 #controllerApplyButton,
 .controller-card button,
 .controller-empty button,
@@ -486,6 +487,8 @@ button.is-loading .button-spinner {
 .controller-card button:not(:disabled):hover,
 .controller-empty button:not(:disabled):hover,
 .controller-setup-card button:not(:disabled):hover,
+.mapper-ready button:not(:disabled):hover,
+.mapper-actions button:not(:disabled):hover,
 .empty-state button:not(:disabled):hover {
   border-color: rgba(56, 217, 130, 0.34);
   background: rgba(56, 217, 130, 0.09);
@@ -1198,6 +1201,13 @@ button.is-loading .button-spinner {
   white-space: nowrap;
 }
 
+.controller-apply-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+#controllerMapButton,
 #controllerApplyButton {
   flex: 0 0 auto;
   min-height: 38px;
@@ -1207,9 +1217,194 @@ button.is-loading .button-spinner {
   color: var(--green);
 }
 
+#controllerMapButton:disabled,
 #controllerApplyButton:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+.controller-mapper {
+  display: grid;
+  min-width: 0;
+}
+
+.mapper-empty,
+.mapper-ready,
+.mapper-session {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.mapper-empty,
+.mapper-ready {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mapper-ready.saved {
+  border-color: rgba(56, 217, 130, 0.28);
+  background: rgba(56, 217, 130, 0.065);
+}
+
+.mapper-ready div,
+.mapper-empty {
+  min-width: 0;
+}
+
+.mapper-ready strong,
+.mapper-ready p,
+.mapper-empty strong,
+.mapper-empty p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mapper-ready button,
+.mapper-actions button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(56, 217, 130, 0.28);
+  border-radius: 8px;
+  background: rgba(56, 217, 130, 0.1);
+  color: var(--green);
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.mapper-session {
+  display: grid;
+  gap: 12px;
+}
+
+.mapper-session.complete {
+  border-color: rgba(56, 217, 130, 0.34);
+  background: rgba(56, 217, 130, 0.06);
+}
+
+.mapper-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mapper-head div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.mapper-head p,
+.mapper-empty p,
+.mapper-ready p,
+.mapping-list small {
+  color: var(--muted);
+}
+
+.mapper-head span {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(56, 217, 130, 0.12);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.mapping-progress {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mapping-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), #80ebb2);
+  transition: width 160ms ease;
+}
+
+.mapping-prompt {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 112px;
+  border: 1px dashed rgba(56, 217, 130, 0.34);
+  border-radius: 10px;
+  background: rgba(56, 217, 130, 0.055);
+  text-align: center;
+}
+
+.mapping-prompt span {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.mapping-prompt strong {
+  font-size: 28px;
+}
+
+.mapping-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mapping-list li {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.mapping-list li.active {
+  border-color: rgba(56, 217, 130, 0.5);
+  background: rgba(56, 217, 130, 0.09);
+}
+
+.mapping-list li.done {
+  border-color: rgba(80, 167, 255, 0.25);
+}
+
+.mapping-list span,
+.mapping-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mapping-list span {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.mapping-list small {
+  font-size: 11px;
+}
+
+.mapper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .controller-layout {
@@ -1821,6 +2016,8 @@ button.is-loading .button-spinner {
   .controller-sheet header,
   .artwork-sheet header,
   .controller-apply,
+  .mapper-ready,
+  .mapper-empty,
   .panel-head {
     align-items: stretch;
     flex-direction: column;
@@ -1843,6 +2040,7 @@ button.is-loading .button-spinner {
   .controller-layout,
   .controller-notes,
   .controller-setup-list,
+  .mapping-list,
   .artwork-results,
   .manual-artwork {
     grid-template-columns: 1fr;

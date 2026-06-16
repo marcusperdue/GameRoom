@@ -495,6 +495,7 @@ button.is-loading .button-spinner {
 .controller-empty button:not(:disabled):hover,
 .controller-setup-card button:not(:disabled):hover,
 .mapper-ready button:not(:disabled):hover,
+.mapper-empty button:not(:disabled):hover,
 .mapper-actions button:not(:disabled):hover,
 .empty-state button:not(:disabled):hover {
   border-color: rgba(56, 217, 130, 0.34);
@@ -1273,6 +1274,7 @@ button.is-loading .button-spinner {
 }
 
 .mapper-ready button,
+.mapper-empty button,
 .mapper-actions button {
   flex: 0 0 auto;
   min-height: 34px;

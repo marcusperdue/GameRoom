@@ -368,26 +368,37 @@ async function saveControllerState(nextState = {}) {
 }
 
 async function getSystemControllers() {
-  const connected = process.platform === "darwin" ? detectMacGameControllers() : [];
-  const paired = process.platform === "darwin" ? detectMacPairedBluetoothControllers() : [];
+  const detected = process.platform === "darwin" ? detectMacSystemControllers() : { connected: [], paired: [] };
   return {
     platform: process.platform,
-    connected,
-    paired,
+    connected: detected.connected,
+    paired: detected.paired,
     checkedAt: new Date().toISOString()
   };
 }
 
-function detectMacGameControllers() {
-  const synthetic = commandOutput("ioreg", ["-r", "-c", "AppleGCSyntheticDevice", "-l", "-w", "0"]);
-  const devices = parseIoregControllerDevices(synthetic, "macOS Game Controller");
-  if (devices.length) return dedupeControllers(devices);
-
-  const hid = commandOutput("ioreg", ["-r", "-c", "IOHIDDevice", "-l", "-w", "0"]);
-  return dedupeControllers(parseIoregControllerDevices(hid, "macOS HID"));
+function detectMacSystemControllers() {
+  const bluetooth = detectMacBluetoothControllers();
+  return {
+    connected: dedupeControllers([
+      ...detectMacGameControllers(),
+      ...detectMacUsbControllers(),
+      ...bluetooth.filter((device) => device.status === "connected")
+    ]),
+    paired: dedupeControllers(bluetooth.filter((device) => device.status !== "connected"))
+  };
 }
 
-function detectMacPairedBluetoothControllers() {
+function detectMacGameControllers() {
+  const hid = commandOutput("ioreg", ["-r", "-c", "IOHIDDevice", "-l", "-w", "0"]);
+  const hidDevices = parseIoregControllerDevices(hid, "macOS HID");
+  if (hidDevices.length) return dedupeControllers(hidDevices);
+
+  const synthetic = commandOutput("ioreg", ["-r", "-c", "AppleGCSyntheticDevice", "-l", "-w", "0"]);
+  return dedupeControllers(parseIoregControllerDevices(synthetic, "macOS Game Controller"));
+}
+
+function detectMacBluetoothControllers() {
   const report = commandOutput("system_profiler", ["SPBluetoothDataType"]);
   const devices = [];
   const lines = report.split(/\r?\n/);
@@ -418,6 +429,56 @@ function detectMacPairedBluetoothControllers() {
   }
 
   return dedupeControllers(devices);
+}
+
+function detectMacUsbControllers() {
+  const report = commandOutput("system_profiler", ["SPUSBDataType"]);
+  const blocks = parseSystemProfilerBlocks(report);
+  return dedupeControllers(blocks
+    .filter((device) => isLikelyControllerName(`${device.name} ${device.manufacturer}`))
+    .map((device) => ({
+      id: `usb:${device.vendorId || "vendor"}:${device.productId || "product"}:${device.name.toLowerCase()}`,
+      name: cleanDeviceName([device.manufacturer, device.name].filter(Boolean).join(" ")),
+      manufacturer: device.manufacturer,
+      product: device.name,
+      transport: "USB",
+      type: "USB gamepad",
+      vendorId: device.vendorId,
+      productId: device.productId,
+      source: "macOS USB",
+      status: "connected"
+    })));
+}
+
+function parseSystemProfilerBlocks(report) {
+  const devices = [];
+  let current = null;
+
+  for (const line of report.split(/\r?\n/)) {
+    const heading = line.match(/^(\s{6,})([^:\n][^:\n]+):\s*$/);
+    if (heading) {
+      if (current) devices.push(current);
+      current = {
+        name: heading[2].trim(),
+        manufacturer: "",
+        vendorId: "",
+        productId: ""
+      };
+      continue;
+    }
+
+    if (!current) continue;
+    const property = line.trim().match(/^([^:]+):\s*(.+)$/);
+    if (!property) continue;
+    const key = property[1].trim();
+    const value = property[2].trim();
+    if (key === "Manufacturer") current.manufacturer = value;
+    if (key === "Vendor ID") current.vendorId = value.split(/\s+/)[0];
+    if (key === "Product ID") current.productId = value.split(/\s+/)[0];
+  }
+
+  if (current) devices.push(current);
+  return devices;
 }
 
 function parseIoregControllerDevices(output, source) {
@@ -473,11 +534,18 @@ function cleanDeviceName(name) {
 function dedupeControllers(devices) {
   const seen = new Set();
   return devices.filter((device) => {
-    const key = `${device.status}:${device.transport}:${device.manufacturer}:${device.product}:${device.type}`.toLowerCase();
+    const name = controllerDedupeName(device.name || device.product);
+    const key = `${device.status}:${name}`.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function controllerDedupeName(name) {
+  return cleanDeviceName(name)
+    .replace(/^(microsoft|sony|nintendo|8bitdo)\s+/i, "")
+    .toLowerCase();
 }
 
 function commandOutput(command, args) {
@@ -523,11 +591,11 @@ async function applyUniversalControllerSetup(controller = {}) {
 
   const actions = [];
   actions.push(await writeDolphinControllerSetup(config, controllerProfile));
-
-  for (const [systemName, system] of Object.entries(systems)) {
-    if (system.emulator === "Dolphin") continue;
-    actions.push(await writeEmulatorControllerRecord(config, profiles, systemName, controllerProfile));
-  }
+  actions.push(await writePcsx2ControllerSetup(config, profiles, controllerProfile));
+  actions.push(await writeXemuControllerSetup(config, profiles, controllerProfile));
+  actions.push(await writeMelonDsControllerSetup(config, profiles, controllerProfile));
+  actions.push(await writeDuckStationControllerSetup(config, profiles, controllerProfile));
+  actions.push(await writePpssppControllerSetup(config, profiles, controllerProfile));
 
   const nextState = await saveControllerState({
     defaultController: controllerProfile.controller.id,
@@ -724,29 +792,426 @@ async function writeDolphinControllerSetup(config, controllerProfile) {
   return action;
 }
 
-async function writeEmulatorControllerRecord(config, profiles, systemName, controllerProfile) {
-  const system = systems[systemName];
-  const outputFolder = path.join(config.controlsRoot, system.emulator);
-  await fsp.mkdir(outputFolder, { recursive: true });
-  const setupPath = path.join(outputFolder, `${systemName}.json`);
-  const configured = Boolean(profiles[systemName]?.command && commandExists(profiles[systemName].command));
-  await writeJson(setupPath, {
-    system: systemName,
-    emulator: system.emulator,
-    controller: controllerProfile.controller,
-    standardMap: controllerProfile.standardMap,
-    note: `${system.emulator} keeps final button binding in its own settings. Open the emulator once and select this controller for player 1.`,
-    updatedAt: new Date().toISOString()
-  });
+async function writePcsx2ControllerSetup(config, profiles, controllerProfile) {
+  const systemName = "PS2";
+  const emulator = "PCSX2";
+  const templatePath = await writeControllerTemplate(config, emulator, "PCSX2.ini", pcsx2ControllerIni(controllerProfile));
+  const targetPath = pcsx2ConfigPath();
+  const configured = emulatorConfigured(profiles, systemName);
 
+  if (!targetPath && !configured) {
+    return controllerAction(systemName, emulator, "missing", "PCSX2 not configured", profiles[systemName]?.command || "Not configured", false);
+  }
+
+  if (!targetPath) {
+    return controllerAction(systemName, emulator, "needsReview", "Open PCSX2 once, then apply again", toPortablePath(templatePath), configured);
+  }
+
+  try {
+    const content = fs.existsSync(targetPath) ? await fsp.readFile(targetPath, "utf8") : "";
+    let next = upsertIniEntries(content, "InputSources", {
+      SDL: "true",
+      SDLControllerEnhancedMode: process.platform === "win32" ? "false" : "true"
+    });
+    next = upsertIniEntries(next, "Pad", {
+      MultitapPort1: "false",
+      MultitapPort2: "false"
+    });
+    next = upsertIniEntries(next, "Pad1", pcsx2PadEntries());
+    await fsp.mkdir(path.dirname(targetPath), { recursive: true });
+    await backupExistingConfig(targetPath, emulator);
+    await fsp.writeFile(targetPath, next);
+    return controllerAction(systemName, emulator, "applied", "Applied PS2 SDL controls", targetPath, configured);
+  } catch (error) {
+    return controllerAction(systemName, emulator, "needsReview", "Could not write PCSX2 controls", error.message, configured);
+  }
+}
+
+async function writeXemuControllerSetup(config, profiles, controllerProfile) {
+  const systemName = "Xbox";
+  const emulator = "xemu";
+  const templatePath = await writeControllerTemplate(config, emulator, "xemu.toml", xemuControllerToml(controllerProfile));
+  const targetPath = xemuConfigPath();
+  const configured = emulatorConfigured(profiles, systemName);
+
+  if (!targetPath && !configured) {
+    return controllerAction(systemName, emulator, "missing", "xemu not configured", profiles[systemName]?.command || "Not configured", false);
+  }
+
+  if (!targetPath) {
+    return controllerAction(systemName, emulator, "needsReview", "Open xemu once, then apply again", toPortablePath(templatePath), configured);
+  }
+
+  try {
+    const content = fs.existsSync(targetPath) ? await fsp.readFile(targetPath, "utf8") : "";
+    const next = upsertIniEntries(content, "input.bindings", {
+      port1_driver: "'usb-xbox-gamepad'"
+    });
+    await fsp.mkdir(path.dirname(targetPath), { recursive: true });
+    await backupExistingConfig(targetPath, emulator);
+    await fsp.writeFile(targetPath, next);
+    return controllerAction(systemName, emulator, "applied", "Enabled xemu player 1 gamepad", targetPath, configured);
+  } catch (error) {
+    return controllerAction(systemName, emulator, "needsReview", "Could not write xemu controls", error.message, configured);
+  }
+}
+
+async function writeMelonDsControllerSetup(config, profiles, controllerProfile) {
+  const systemName = "NintendoDS";
+  const emulator = "melonDS";
+  const templatePath = await writeControllerTemplate(config, emulator, "melonDS.toml", melonDsControllerToml(controllerProfile));
+  const targetPath = melonDsConfigPath();
+  const configured = emulatorConfigured(profiles, systemName);
+
+  if (!targetPath && !configured) {
+    return controllerAction(systemName, emulator, "missing", "melonDS not configured", profiles[systemName]?.command || "Not configured", false);
+  }
+
+  if (!targetPath) {
+    return controllerAction(systemName, emulator, "needsReview", "Open melonDS once, then apply again", toPortablePath(templatePath), configured);
+  }
+
+  try {
+    const content = fs.existsSync(targetPath) ? await fsp.readFile(targetPath, "utf8") : "";
+    let next = upsertIniEntries(content, "Instance0", { JoystickID: "0" });
+    next = upsertIniEntries(next, "Instance0.Joystick", melonDsJoystickEntries(controllerProfile));
+    await fsp.mkdir(path.dirname(targetPath), { recursive: true });
+    await backupExistingConfig(targetPath, emulator);
+    await fsp.writeFile(targetPath, next);
+    return controllerAction(systemName, emulator, "applied", "Applied Nintendo DS controls", targetPath, configured);
+  } catch (error) {
+    return controllerAction(systemName, emulator, "needsReview", "Could not write melonDS controls", error.message, configured);
+  }
+}
+
+async function writeDuckStationControllerSetup(config, profiles, controllerProfile) {
+  const systemName = "PS1";
+  const emulator = "DuckStation";
+  const templatePath = await writeControllerTemplate(config, emulator, "settings.ini", duckStationControllerIni(controllerProfile));
+  const configured = emulatorConfigured(profiles, systemName);
+  const targetPath = duckStationConfigPath() || (configured ? preferredDuckStationConfigPath() : "");
+
+  if (!targetPath && !configured) {
+    return controllerAction(systemName, emulator, "missing", "DuckStation not configured", profiles[systemName]?.command || "Not configured", false);
+  }
+
+  if (!targetPath) {
+    return controllerAction(systemName, emulator, "needsReview", "Open DuckStation once, then apply again", toPortablePath(templatePath), configured);
+  }
+
+  try {
+    const content = fs.existsSync(targetPath) ? await fsp.readFile(targetPath, "utf8") : "";
+    let next = upsertIniEntries(content, "InputSources", {
+      SDL: "true",
+      SDLControllerEnhancedMode: "false"
+    });
+    next = upsertIniEntries(next, "ControllerPorts", {
+      MultitapMode: "Disabled"
+    });
+    next = upsertIniEntries(next, "Pad1", duckStationPadEntries());
+    await fsp.mkdir(path.dirname(targetPath), { recursive: true });
+    await backupExistingConfig(targetPath, emulator);
+    await fsp.writeFile(targetPath, next);
+    return controllerAction(systemName, emulator, "applied", "Applied PS1 SDL controls", targetPath, configured);
+  } catch (error) {
+    return controllerAction(systemName, emulator, "needsReview", "Could not write DuckStation controls", error.message, configured);
+  }
+}
+
+async function writePpssppControllerSetup(config, profiles, controllerProfile) {
+  const systemName = "PSP";
+  const emulator = "PPSSPP";
+  const templatePath = await writeControllerTemplate(config, emulator, "controls.ini", ppssppControlsIni(controllerProfile));
+  const configured = emulatorConfigured(profiles, systemName);
+  const targetPath = ppssppControlsPath() || (configured ? preferredPpssppControlsPath() : "");
+
+  if (!targetPath && !configured) {
+    return controllerAction(systemName, emulator, "missing", "PPSSPP not configured", profiles[systemName]?.command || "Not configured", false);
+  }
+
+  if (!targetPath) {
+    return controllerAction(systemName, emulator, "needsReview", "Open PPSSPP once, then apply again", toPortablePath(templatePath), configured);
+  }
+
+  try {
+    await fsp.mkdir(path.dirname(targetPath), { recursive: true });
+    await backupExistingConfig(targetPath, emulator);
+    await fsp.writeFile(targetPath, ppssppControlsIni(controllerProfile));
+    return controllerAction(systemName, emulator, "applied", "Applied PSP controls", targetPath, configured);
+  } catch (error) {
+    return controllerAction(systemName, emulator, "needsReview", "Could not write PPSSPP controls", error.message, configured);
+  }
+}
+
+async function writeControllerTemplate(config, emulator, fileName, content) {
+  const outputFolder = path.join(config.controlsRoot, emulator);
+  await fsp.mkdir(outputFolder, { recursive: true });
+  const templatePath = path.join(outputFolder, fileName);
+  await fsp.writeFile(templatePath, content);
+  return templatePath;
+}
+
+function controllerAction(system, emulator, status, label, detail, canOpen) {
+  return { system, emulator, status, label, detail, canOpen };
+}
+
+function emulatorConfigured(profiles, systemName) {
+  return Boolean(profiles[systemName]?.command && commandExists(profiles[systemName].command));
+}
+
+function pcsx2ControllerIni() {
+  return [
+    "[InputSources]",
+    "SDL = true",
+    `SDLControllerEnhancedMode = ${process.platform === "win32" ? "false" : "true"}`,
+    "",
+    "[Pad]",
+    "MultitapPort1 = false",
+    "MultitapPort2 = false",
+    "",
+    "[Pad1]",
+    ...Object.entries(pcsx2PadEntries()).map(([key, value]) => `${key} = ${value}`),
+    ""
+  ].join("\n");
+}
+
+function pcsx2PadEntries() {
   return {
-    system: systemName,
-    emulator: system.emulator,
-    status: configured ? "needsReview" : "missing",
-    label: configured ? "Profile saved, confirm in emulator" : "Emulator not configured",
-    detail: configured ? toPortablePath(setupPath) : profiles[systemName]?.command || "Not configured",
-    canOpen: configured
+    Type: "DualShock2",
+    InvertL: "0",
+    InvertR: "0",
+    Deadzone: "0",
+    AxisScale: "1.33",
+    LargeMotorScale: "1",
+    SmallMotorScale: "1",
+    ButtonDeadzone: "0",
+    PressureModifier: "0.5",
+    Up: "SDL-0/DPadUp",
+    Right: "SDL-0/DPadRight",
+    Down: "SDL-0/DPadDown",
+    Left: "SDL-0/DPadLeft",
+    Triangle: "SDL-0/FaceNorth",
+    Circle: "SDL-0/FaceEast",
+    Cross: "SDL-0/FaceSouth",
+    Square: "SDL-0/FaceWest",
+    Select: "SDL-0/Back",
+    Start: "SDL-0/Start",
+    L1: "SDL-0/LeftShoulder",
+    L2: "SDL-0/+LeftTrigger",
+    R1: "SDL-0/RightShoulder",
+    R2: "SDL-0/+RightTrigger",
+    L3: "SDL-0/LeftStick",
+    R3: "SDL-0/RightStick",
+    LUp: "SDL-0/-LeftY",
+    LRight: "SDL-0/+LeftX",
+    LDown: "SDL-0/+LeftY",
+    LLeft: "SDL-0/-LeftX",
+    RUp: "SDL-0/-RightY",
+    RRight: "SDL-0/+RightX",
+    RDown: "SDL-0/+RightY",
+    RLeft: "SDL-0/-RightX",
+    LargeMotor: "SDL-0/LargeMotor",
+    SmallMotor: "SDL-0/SmallMotor"
   };
+}
+
+function xemuControllerToml() {
+  return [
+    "[input.bindings]",
+    "port1_driver = 'usb-xbox-gamepad'",
+    ""
+  ].join("\n");
+}
+
+function melonDsControllerToml(controllerProfile) {
+  return [
+    "[Instance0]",
+    "JoystickID = 0",
+    "",
+    "[Instance0.Joystick]",
+    ...Object.entries(melonDsJoystickEntries(controllerProfile)).map(([key, value]) => `${key} = ${value}`),
+    ""
+  ].join("\n");
+}
+
+function melonDsJoystickEntries(controllerProfile) {
+  const map = normalizeStandardMap(controllerProfile.standardMap);
+  return {
+    A: buttonIndex(map.face.east),
+    B: buttonIndex(map.face.south),
+    X: buttonIndex(map.face.north),
+    Y: buttonIndex(map.face.west),
+    L: buttonIndex(map.shoulders.left),
+    R: buttonIndex(map.shoulders.right),
+    Select: buttonIndex(map.menu.back),
+    Start: buttonIndex(map.menu.start),
+    Up: buttonIndex(map.dpad.up),
+    Down: buttonIndex(map.dpad.down),
+    Left: buttonIndex(map.dpad.left),
+    Right: buttonIndex(map.dpad.right)
+  };
+}
+
+function duckStationControllerIni() {
+  return [
+    "[InputSources]",
+    "SDL = true",
+    "SDLControllerEnhancedMode = false",
+    "",
+    "[ControllerPorts]",
+    "MultitapMode = Disabled",
+    "",
+    "[Pad1]",
+    ...Object.entries(duckStationPadEntries()).map(([key, value]) => `${key} = ${value}`),
+    ""
+  ].join("\n");
+}
+
+function duckStationPadEntries() {
+  return {
+    Type: "AnalogController",
+    Up: "SDL-0/DPadUp",
+    Right: "SDL-0/DPadRight",
+    Down: "SDL-0/DPadDown",
+    Left: "SDL-0/DPadLeft",
+    Triangle: "SDL-0/Y",
+    Circle: "SDL-0/B",
+    Cross: "SDL-0/A",
+    Square: "SDL-0/X",
+    Select: "SDL-0/Back",
+    Start: "SDL-0/Start",
+    L1: "SDL-0/LeftShoulder",
+    R1: "SDL-0/RightShoulder",
+    L2: "SDL-0/+LeftTrigger",
+    R2: "SDL-0/+RightTrigger",
+    L3: "SDL-0/LeftStick",
+    R3: "SDL-0/RightStick",
+    LLeft: "SDL-0/-LeftX",
+    LRight: "SDL-0/+LeftX",
+    LDown: "SDL-0/+LeftY",
+    LUp: "SDL-0/-LeftY",
+    RLeft: "SDL-0/-RightX",
+    RRight: "SDL-0/+RightX",
+    RDown: "SDL-0/+RightY",
+    RUp: "SDL-0/-RightY",
+    SmallMotor: "SDL-0/SmallMotor",
+    LargeMotor: "SDL-0/LargeMotor",
+    AnalogDPadInDigitalMode: "false"
+  };
+}
+
+function ppssppControlsIni() {
+  return [
+    "[ControlMapping]",
+    "Up = 10-19",
+    "Down = 10-20",
+    "Left = 10-21",
+    "Right = 10-22",
+    "Circle = 10-190",
+    "Cross = 10-189",
+    "Square = 10-191",
+    "Triangle = 10-188",
+    "Start = 10-197",
+    "Select = 10-196",
+    "L = 10-194",
+    "R = 10-195",
+    "An.Up = 10-4003",
+    "An.Down = 10-4002",
+    "An.Left = 10-4001",
+    "An.Right = 10-4000",
+    ""
+  ].join("\n");
+}
+
+function buttonIndex(binding) {
+  return Number.isInteger(binding?.index) ? String(binding.index) : "-1";
+}
+
+function pcsx2ConfigPath() {
+  return firstExistingPath([
+    path.join(os.homedir(), "Library", "Application Support", "PCSX2", "inis", "PCSX2.ini"),
+    path.join(os.homedir(), ".config", "PCSX2", "inis", "PCSX2.ini"),
+    path.join(os.homedir(), "Documents", "PCSX2", "inis", "PCSX2.ini")
+  ]);
+}
+
+function xemuConfigPath() {
+  return firstExistingPath([
+    path.join(os.homedir(), "Library", "Application Support", "xemu", "xemu", "xemu.toml"),
+    path.join(os.homedir(), ".local", "share", "xemu", "xemu", "xemu.toml"),
+    path.join(os.homedir(), "AppData", "Roaming", "xemu", "xemu", "xemu.toml")
+  ]);
+}
+
+function melonDsConfigPath() {
+  return firstExistingPath([
+    path.join(os.homedir(), "Library", "Preferences", "melonDS", "melonDS.toml"),
+    path.join(os.homedir(), ".config", "melonDS", "melonDS.toml"),
+    path.join(os.homedir(), "AppData", "Roaming", "melonDS", "melonDS.toml")
+  ]);
+}
+
+function duckStationConfigPath() {
+  return firstExistingPath([
+    preferredDuckStationConfigPath(),
+    path.join(os.homedir(), "Library", "Application Support", "duckstation", "settings.ini"),
+    path.join(os.homedir(), ".local", "share", "duckstation", "settings.ini"),
+    path.join(os.homedir(), "Documents", "DuckStation", "settings.ini")
+  ]);
+}
+
+function preferredDuckStationConfigPath() {
+  if (process.platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "DuckStation", "settings.ini");
+  if (process.platform === "win32") return path.join(os.homedir(), "Documents", "DuckStation", "settings.ini");
+  return path.join(os.homedir(), ".local", "share", "duckstation", "settings.ini");
+}
+
+function ppssppControlsPath() {
+  return firstExistingPath([
+    preferredPpssppControlsPath(),
+    path.join(os.homedir(), ".config", "ppsspp", "PSP", "SYSTEM", "controls.ini"),
+    path.join(os.homedir(), "Documents", "PPSSPP", "PSP", "SYSTEM", "controls.ini")
+  ]);
+}
+
+function preferredPpssppControlsPath() {
+  if (process.platform === "darwin") return path.join(os.homedir(), "Library", "Application Support", "PPSSPP", "PSP", "SYSTEM", "controls.ini");
+  if (process.platform === "win32") return path.join(os.homedir(), "Documents", "PPSSPP", "PSP", "SYSTEM", "controls.ini");
+  return path.join(os.homedir(), ".config", "ppsspp", "PSP", "SYSTEM", "controls.ini");
+}
+
+function firstExistingPath(paths) {
+  return paths.find((candidate) => candidate && fs.existsSync(candidate)) || "";
+}
+
+function upsertIniEntries(content, section, entries) {
+  const lines = String(content || "").replace(/\r\n/g, "\n").split("\n");
+  if (lines.length === 1 && lines[0] === "") lines.pop();
+
+  const sectionHeader = `[${section}]`;
+  let start = lines.findIndex((line) => line.trim() === sectionHeader);
+  if (start === -1) {
+    if (lines.length && lines[lines.length - 1].trim()) lines.push("");
+    lines.push(sectionHeader);
+    for (const [key, value] of Object.entries(entries)) lines.push(`${key} = ${value}`);
+    lines.push("");
+    return lines.join("\n");
+  }
+
+  let end = lines.findIndex((line, index) => index > start && /^\s*\[[^\]]+\]\s*$/.test(line));
+  if (end === -1) end = lines.length;
+
+  const pending = new Map(Object.entries(entries));
+  for (let index = start + 1; index < end; index += 1) {
+    const match = lines[index].match(/^(\s*([^=:#\s]+)\s*=\s*)(.*)$/);
+    if (!match || !pending.has(match[2])) continue;
+    lines[index] = `${match[1]}${pending.get(match[2])}`;
+    pending.delete(match[2]);
+  }
+
+  const additions = Array.from(pending.entries()).map(([key, value]) => `${key} = ${value}`);
+  lines.splice(end, 0, ...additions);
+  return lines.join("\n");
 }
 
 function dolphinConfigFolder() {

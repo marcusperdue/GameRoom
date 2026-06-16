@@ -737,7 +737,8 @@ function renderControllerCenter() {
 
   renderControllerSetupList();
   renderControllerMapper(selected);
-  controllerMapButton.disabled = !selected?.live || Boolean(mappingSession?.active);
+  controllerMapButton.textContent = selected?.live ? "Map Buttons" : "Use Standard Layout";
+  controllerMapButton.disabled = !selected || Boolean(mappingSession?.active);
   controllerApplyButton.disabled = applyingControllerProfile || !isReady;
   if (applyingControllerProfile) {
     setButtonLoading(controllerApplyButton, true, "Applying");
@@ -749,10 +750,23 @@ function renderControllerCenter() {
 
 function renderControllerMapper(selected) {
   if (!controllerMapper) return;
+  if (!selected) {
+    controllerMapper.innerHTML = `<div class="mapper-empty">
+      <div>
+        <strong>No controller ready</strong>
+        <p>Plug in by USB or pair Bluetooth in the operating system, then refresh.</p>
+      </div>
+    </div>`;
+    return;
+  }
+
   if (!selected?.live) {
     controllerMapper.innerHTML = `<div class="mapper-empty">
-      <strong>Live input needed for button mapping</strong>
-      <p>GameRoom can see this controller at the OS level, but the button mapper needs live input. Press a button, reconnect by USB, or pair Bluetooth again.</p>
+      <div>
+        <strong>Use a standard controller layout</strong>
+        <p>macOS sees ${escapeHtml(selected.name)}. If live input is unavailable here, save the standard Xbox/PlayStation-style layout and apply it to emulators.</p>
+      </div>
+      <button data-mapping-action="standard" type="button">Use Standard Layout</button>
     </div>`;
     return;
   }
@@ -859,7 +873,7 @@ function renderControllerSetupList() {
   if (!rows.length) {
     controllerSetupList.innerHTML = `<div class="controller-empty compact">
       <strong>No emulator setup applied yet</strong>
-      <p>Apply once after connecting your controller. Dolphin can be written automatically; other emulators open for final confirmation.</p>
+      <p>Apply once after connecting your controller. GameRoom writes supported emulator config files and flags anything that still needs review.</p>
     </div>`;
     return;
   }
@@ -941,7 +955,7 @@ function renderSystemInputFallback(device) {
 function startMappingSession() {
   const device = activeController();
   if (!device?.live) {
-    showToast("Live controller input is needed for button mapping");
+    saveStandardControllerLayout(controllerMapButton);
     return;
   }
 
@@ -1021,6 +1035,37 @@ async function saveMappingSession(button = null) {
   stopMappingPolling();
   renderControllerCenter();
   showToast("Universal controller mapping saved");
+}
+
+async function saveStandardControllerLayout(button = null) {
+  const device = activeController();
+  if (!device) {
+    showToast("Connect a controller first");
+    return;
+  }
+
+  const controller = {
+    ...summarizeControllerDevice(device),
+    standardMap: defaultStandardMap()
+  };
+  controllerState = await withLoading(button, {
+    buttonLabel: "Saving",
+    status: "Saving standard controller layout"
+  }, () => window.gameRoom.saveControllers({
+    defaultController: controller.id,
+    profiles: {
+      ...(controllerState?.profiles || {}),
+      [controller.id]: controller
+    },
+    universalProfile: {
+      version: 1,
+      appliedAt: new Date().toISOString(),
+      controller,
+      standardMap: controller.standardMap
+    }
+  }));
+  renderControllerCenter();
+  showToast("Standard controller layout saved");
 }
 
 function startMappingPolling() {
@@ -1583,6 +1628,7 @@ controllerOverlay.addEventListener("click", async (event) => {
     if (action === "skip") skipMappingStep();
     if (action === "back") previousMappingStep();
     if (action === "cancel") cancelMappingSession();
+    if (action === "standard") await saveStandardControllerLayout(mappingButton);
     if (action === "save") await saveMappingSession(mappingButton);
     return;
   }

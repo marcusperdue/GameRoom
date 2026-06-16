@@ -2,6 +2,7 @@
 
 !/.gitignore
 !/LICENSE
+!/README.md
 !/Launch GameRoom.command
 
 !/App/
@@ -22,6 +23,7 @@ Agents/
 Docs/
 README.md
 **/*.md
+!/README.md
 
 Games/
 BIOS/

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require("electron");
 const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
@@ -30,6 +30,8 @@ const portableFolderDefaults = {
   metadataRoot: "Metadata",
   backupRoot: path.join("Backups", "Saves")
 };
+
+app.setName("GameRoom");
 
 process.on("uncaughtException", (error) => {
   console.error("Unhandled GameRoom main-process error:", error);
@@ -137,6 +139,7 @@ function createWindow() {
   if (process.platform === "darwin" && app.dock) {
     app.dock.setIcon(appIconPngPath);
   }
+  setupApplicationMenu();
 
   const win = new BrowserWindow({
     width: 1280,
@@ -548,6 +551,82 @@ function dedupeControllers(devices) {
     seen.add(key);
     return true;
   });
+}
+
+function setupApplicationMenu() {
+  const template = process.platform === "darwin"
+    ? [
+        {
+          label: "GameRoom",
+          submenu: [
+            { role: "about" },
+            { type: "separator" },
+            { role: "services" },
+            { type: "separator" },
+            { role: "hide" },
+            { role: "hideOthers" },
+            { role: "unhide" },
+            { type: "separator" },
+            { role: "quit" }
+          ]
+        },
+        {
+          label: "File",
+          submenu: [{ role: "close" }]
+        },
+        {
+          label: "Edit",
+          submenu: [
+            { role: "undo" },
+            { role: "redo" },
+            { type: "separator" },
+            { role: "cut" },
+            { role: "copy" },
+            { role: "paste" },
+            { role: "selectAll" }
+          ]
+        },
+        {
+          label: "View",
+          submenu: [
+            { role: "reload" },
+            { role: "forceReload" },
+            { role: "toggleDevTools" },
+            { type: "separator" },
+            { role: "resetZoom" },
+            { role: "zoomIn" },
+            { role: "zoomOut" },
+            { type: "separator" },
+            { role: "togglefullscreen" }
+          ]
+        },
+        {
+          label: "Window",
+          submenu: [{ role: "minimize" }, { role: "zoom" }, { type: "separator" }, { role: "front" }]
+        }
+      ]
+    : [
+        {
+          label: "File",
+          submenu: [{ role: "quit" }]
+        },
+        {
+          label: "View",
+          submenu: [
+            { role: "reload" },
+            { role: "forceReload" },
+            { role: "toggleDevTools" },
+            { type: "separator" },
+            { role: "resetZoom" },
+            { role: "zoomIn" },
+            { role: "zoomOut" },
+            { type: "separator" },
+            { role: "togglefullscreen" }
+          ]
+        }
+      ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 function platformAppIconPath() {

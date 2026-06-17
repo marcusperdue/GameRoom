@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "Portable console launcher for GameCube, Wii, PS2, Xbox, Nintendo DS, PS1, and PSP.",
+  "author": "Marcus Perdue",
+  "homepage": "https://marcusperdue.github.io/GameRoom/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marcusperdue/GameRoom.git"
+  },
+  "desktopName": "GameRoom",
   "main": "src/main.js",
   "type": "commonjs",
   "scripts": {
@@ -11,9 +18,10 @@
     "scan": "node ../Scripts/scan-library.mjs",
     "init": "node ../Scripts/init-folders.mjs",
     "pack": "electron-builder --dir",
-    "dist:mac": "electron-builder --mac dmg zip",
-    "dist:linux": "electron-builder --linux AppImage tar.gz",
-    "dist:win": "electron-builder --win nsis zip"
+    "dist:mac": "electron-builder --mac dmg zip --arm64 --x64",
+    "dist:linux": "electron-builder --linux AppImage tar.gz --arm64 --x64",
+    "dist:win": "electron-builder --win nsis zip --arm64 --x64",
+    "dist:all": "npm run dist:mac && npm run dist:linux && npm run dist:win"
   },
   "devDependencies": {
     "electron": "^33.3.1",
@@ -23,6 +31,7 @@
     "appId": "local.gameroom.launcher",
     "productName": "GameRoom",
     "icon": "src/assets/icon.png",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "../Downloads/Updates/builds"
     },
@@ -40,6 +49,7 @@
     },
     "linux": {
       "icon": "src/assets/icon.png",
+      "syncDesktopName": true,
       "target": [
         "AppImage",
         "tar.gz"

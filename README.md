@@ -4,6 +4,8 @@ GameRoom is an open-source desktop launcher for newer console emulation. The goa
 
 It is built for casual players who want something closer to a console shelf than a pile of emulator windows.
 
+Download builds from [marcusperdue.github.io/GameRoom](https://marcusperdue.github.io/GameRoom/) or from the [latest GitHub release](https://github.com/marcusperdue/GameRoom/releases/latest).
+
 ## Important Legal Note
 
 GameRoom does not include games, ROMs, disc images, BIOS files, firmware files, keys, or emulator binaries.

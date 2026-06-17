@@ -5,6 +5,10 @@
 !/README.md
 !/Launch GameRoom.command
 
+!/.github/
+!/.github/workflows/
+!/.github/workflows/*.yml
+
 !/App/
 !/App/package.json
 !/App/package-lock.json
@@ -24,6 +28,10 @@ Docs/
 README.md
 **/*.md
 !/README.md
+!/docs/
+!/docs/index.html
+!/docs/assets/
+!/docs/assets/**
 
 Games/
 BIOS/

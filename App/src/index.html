@@ -29,6 +29,7 @@
         <section class="quick-dock">
           <button data-folder="gameRoot" type="button"><span>▣</span>Games</button>
           <button data-folder="saveRoot" type="button"><span>☁</span>Saves</button>
+          <button data-settings-open type="button"><span>⚙</span>Settings</button>
           <button data-controller-center type="button"><span>◉</span>Controllers</button>
           <button data-artwork-center type="button"><span>▧</span>Artwork</button>
           <button data-folder="biosRoot" type="button"><span>⚙</span>BIOS</button>
@@ -47,6 +48,7 @@
             <button id="scanButton" type="button"><span class="action-icon scan-icon" aria-hidden="true">↻</span><span class="action-label">Scan Library</span></button>
             <button id="snapshotButton" type="button"><span class="action-icon" aria-hidden="true">☁</span><span class="action-label">Backup Saves</span></button>
             <button id="guideButton" type="button"><span class="action-icon" aria-hidden="true">?</span><span class="action-label">Guide</span></button>
+            <button id="settingsButton" type="button" data-settings-open><span class="action-icon" aria-hidden="true">⚙</span><span class="action-label">Settings</span></button>
           </div>
         </header>
 
@@ -59,15 +61,21 @@
           <div id="healthList" class="setup-list"></div>
         </section>
 
-        <section class="hero-panel" id="heroGame"></section>
-
         <section class="library-panel">
           <div class="library-head">
             <div>
-              <p class="eyebrow">Recently Added</p>
-              <h3 id="libraryTitle">Recently Added</h3>
+              <p class="eyebrow">Library</p>
+              <h3 id="libraryTitle">Browse Games</h3>
             </div>
-            <button class="view-all" type="button" data-system="All">View all</button>
+          </div>
+
+          <div class="page-browse-controls" id="pageBrowseControls">
+            <label class="browse-search">
+              <span>⌕</span>
+              <input id="pageBrowseSearchInput" type="search" placeholder="Search all games" />
+            </label>
+            <div class="browse-tabs" id="pageBrowseTabs" aria-label="Browse filters"></div>
+            <p class="browse-summary" id="pageBrowseSummary"></p>
           </div>
 
           <section class="drop-zone" id="dropZone">
@@ -128,7 +136,34 @@
 
         <div class="guide-table" id="guideTable"></div>
 
+        <div class="guide-actions">
+          <button id="guideSetupButton" type="button">Open Setup Wizard</button>
+        </div>
+
         <p class="guide-note">GameRoom can use emulator apps you download or install. It does not include games or BIOS files. Use your own legally dumped games and console files.</p>
+      </div>
+    </section>
+
+    <section class="setup-wizard-overlay" id="setupWizardOverlay" aria-hidden="true">
+      <div class="setup-wizard-sheet" role="dialog" aria-modal="true" aria-labelledby="setupWizardTitle">
+        <header>
+          <div>
+            <p class="eyebrow" id="setupWizardEyebrow">First Run Setup</p>
+            <h2 id="setupWizardTitle">Set up GameRoom</h2>
+          </div>
+          <button id="setupWizardCloseButton" type="button" aria-label="Close setup wizard">×</button>
+        </header>
+
+        <nav class="wizard-steps" id="setupWizardSteps" aria-label="Setup steps"></nav>
+        <section class="wizard-body" id="setupWizardBody"></section>
+
+        <footer class="wizard-footer">
+          <button id="setupWizardSkipButton" type="button">Skip</button>
+          <div>
+            <button id="setupWizardBackButton" type="button">Back</button>
+            <button id="setupWizardNextButton" type="button">Next</button>
+          </div>
+        </footer>
       </div>
     </section>
 
@@ -228,6 +263,39 @@
         <div id="artworkResults" class="artwork-results"></div>
 
         <p class="guide-note">GameRoom saves a local copy into Covers and records the source in Metadata. Use artwork you have rights to use.</p>
+      </div>
+    </section>
+    <section class="settings-overlay" id="settingsOverlay" aria-hidden="true">
+      <div class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <header>
+          <div>
+            <p class="eyebrow">Setup</p>
+            <h2 id="settingsTitle">Settings</h2>
+          </div>
+          <button id="settingsCloseButton" type="button" aria-label="Close settings">×</button>
+        </header>
+
+        <section class="settings-toolbar">
+          <button id="settingsWizardButton" type="button"><span>?</span>Setup Wizard</button>
+          <button id="settingsScanButton" type="button"><span>↻</span>Find Emulators</button>
+          <button id="settingsResetButton" type="button"><span>!</span>Reset Setup</button>
+        </section>
+
+        <section>
+          <div class="settings-section-head">
+            <strong>Folders</strong>
+            <span>Choose where GameRoom looks for games, BIOS files, and emulator apps.</span>
+          </div>
+          <div class="settings-list" id="settingsFolderList"></div>
+        </section>
+
+        <section>
+          <div class="settings-section-head">
+            <strong>Emulators</strong>
+            <span>Browse manually when automatic detection cannot find an app.</span>
+          </div>
+          <div class="settings-list emulator-settings-list" id="settingsEmulatorList"></div>
+        </section>
       </div>
     </section>
     <script src="renderer.js"></script>

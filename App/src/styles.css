@@ -56,13 +56,17 @@ button {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+.game-card:focus-visible,
+.browse-game-card:focus-visible {
   outline: 2px solid rgba(56, 217, 130, 0.72);
   outline-offset: 2px;
 }
 
 body.controller-nav-active button:focus,
-body.controller-nav-active input:focus {
+body.controller-nav-active input:focus,
+body.controller-nav-active .game-card:focus,
+body.controller-nav-active .browse-game-card:focus {
   outline: 3px solid rgba(56, 217, 130, 0.86);
   outline-offset: 3px;
   box-shadow: 0 0 0 6px rgba(56, 217, 130, 0.14);
@@ -260,13 +264,48 @@ input {
   border-color: rgba(244, 199, 93, 0.18);
 }
 
-.system-icon {
+.system-icon,
+.system-logo {
   display: grid;
   place-items: center;
   width: 26px;
   min-width: 0;
   color: var(--green);
   font-size: 20px;
+}
+
+.system-logo {
+  height: 26px;
+  justify-content: center;
+  line-height: 1;
+  letter-spacing: 0;
+  font-weight: 950;
+}
+
+.system-logo svg {
+  width: 25px;
+  height: 25px;
+}
+
+.system-logo svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+.system-logo-all {
+  grid-template-columns: repeat(3, 4px);
+  grid-auto-rows: 4px;
+  align-content: center;
+  gap: 2px;
+}
+
+.system-logo-all i {
+  width: 4px;
+  height: 4px;
+  background: currentColor;
 }
 
 .system-name {
@@ -432,6 +471,10 @@ button.is-loading .button-spinner {
   min-width: 0;
 }
 
+.topbar > div:first-child {
+  flex: 1 0 190px;
+}
+
 .eyebrow {
   color: var(--green);
   font-size: 12px;
@@ -442,13 +485,15 @@ button.is-loading .button-spinner {
 
 .topbar h2 {
   max-width: 100%;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
   margin-top: 4px;
   font-size: 30px;
   line-height: 1;
 }
 
 .actions {
+  flex: 0 1 560px;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 10px;
@@ -462,6 +507,8 @@ button.is-loading .button-spinner {
 .primary,
 .detail-actions button,
 #guideCloseButton,
+#browseCloseButton,
+#settingsCloseButton,
 #controllerCloseButton,
 #controllerRefreshButton,
 #controllerMapButton,
@@ -473,6 +520,10 @@ button.is-loading .button-spinner {
 #artworkCloseButton,
 #artworkUrlSaveButton,
 .artwork-card button,
+.browse-tabs button,
+.browse-game-card button,
+.settings-toolbar button,
+.settings-row button,
 .empty-state button {
   min-height: 40px;
   border: 1px solid var(--line);
@@ -494,8 +545,18 @@ button.is-loading .button-spinner {
 .detail-actions button:not(:disabled):hover,
 .quick-dock button:not(:disabled):hover,
 .inline-setup button:not(:disabled):hover,
+.guide-actions button:not(:disabled):hover,
 .guide-table button:not(:disabled):hover,
+.wizard-intro button:not(:disabled):hover,
+.wizard-row button:not(:disabled):hover,
+.wizard-steps button:not(:disabled):hover,
+.wizard-footer button:not(:disabled):hover,
+.wizard-console-picker button:not(:disabled):hover,
 .artwork-toolbar button:not(:disabled):hover,
+.browse-tabs button:not(:disabled):hover,
+.browse-game-card button:not(:disabled):hover,
+.settings-toolbar button:not(:disabled):hover,
+.settings-row button:not(:disabled):hover,
 .controller-card button:not(:disabled):hover,
 .controller-empty button:not(:disabled):hover,
 .controller-setup-card button:not(:disabled):hover,
@@ -719,6 +780,29 @@ button.is-loading .button-spinner {
   overflow: hidden;
 }
 
+.shell.browse-active .stage {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.shell.browse-active .hero-panel {
+  display: none;
+}
+
+.library-panel.browse-mode {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+}
+
+.page-browse-controls {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.page-browse-controls[hidden] {
+  display: none;
+}
+
 .library-head {
   display: flex;
   justify-content: space-between;
@@ -738,6 +822,10 @@ button.is-loading .button-spinner {
   border: 1px dashed var(--line-strong);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.025);
+}
+
+.drop-zone[hidden] {
+  display: none;
 }
 
 .drop-zone.dragging {
@@ -780,6 +868,33 @@ button.is-loading .button-spinner {
   scrollbar-width: none;
 }
 
+.game-shelf.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(154px, 1fr));
+  align-content: start;
+  align-items: start;
+  gap: 14px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 2px 14px 0;
+  scrollbar-width: thin;
+}
+
+.game-shelf.library-grid::-webkit-scrollbar {
+  display: initial;
+  width: 8px;
+}
+
+.game-shelf.library-grid .browse-game-card {
+  min-width: 0;
+}
+
+.game-shelf.library-grid .browse-cover {
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-color: #111a21;
+}
+
 .game-shelf::-webkit-scrollbar {
   display: none;
 }
@@ -795,6 +910,7 @@ button.is-loading .button-spinner {
   padding: 0;
   border: 0;
   background: transparent;
+  color: inherit;
   text-align: left;
   cursor: pointer;
 }
@@ -902,9 +1018,21 @@ button.is-loading .button-spinner {
 .detail-art {
   display: grid;
   place-items: center;
+  position: relative;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.game-cover-image {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center center;
+  pointer-events: none;
 }
 
 .detail-art span {
@@ -1069,6 +1197,9 @@ button.is-loading .button-spinner {
 }
 
 .guide-overlay,
+.browse-overlay,
+.setup-wizard-overlay,
+.settings-overlay,
 .controller-overlay,
 .artwork-overlay {
   position: fixed;
@@ -1081,12 +1212,18 @@ button.is-loading .button-spinner {
 }
 
 .guide-overlay.show,
+.browse-overlay.show,
+.setup-wizard-overlay.show,
+.settings-overlay.show,
 .controller-overlay.show,
 .artwork-overlay.show {
   display: grid;
 }
 
 .guide-sheet,
+.browse-sheet,
+.setup-wizard-sheet,
+.settings-sheet,
 .controller-sheet,
 .artwork-sheet {
   display: grid;
@@ -1102,6 +1239,9 @@ button.is-loading .button-spinner {
 }
 
 .guide-sheet header,
+.browse-sheet header,
+.setup-wizard-sheet header,
+.settings-sheet header,
 .controller-sheet header,
 .artwork-sheet header {
   display: flex;
@@ -1111,6 +1251,9 @@ button.is-loading .button-spinner {
 }
 
 .guide-sheet h2,
+.browse-sheet h2,
+.setup-wizard-sheet h2,
+.settings-sheet h2,
 .controller-sheet h2,
 .artwork-sheet h2 {
   font-size: 30px;
@@ -1118,6 +1261,9 @@ button.is-loading .button-spinner {
 }
 
 #guideCloseButton,
+#browseCloseButton,
+#setupWizardCloseButton,
+#settingsCloseButton,
 #controllerCloseButton,
 #artworkCloseButton {
   display: grid;
@@ -1135,6 +1281,580 @@ button.is-loading .button-spinner {
 
 .artwork-sheet {
   width: min(900px, 100%);
+}
+
+.browse-sheet {
+  width: min(1180px, 100%);
+}
+
+.settings-sheet {
+  width: min(980px, 100%);
+}
+
+.setup-wizard-sheet {
+  width: min(960px, 100%);
+}
+
+.guide-actions {
+  display: flex;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.guide-actions button,
+.wizard-intro button,
+.wizard-row button,
+.wizard-steps button,
+.wizard-footer button,
+.wizard-console-picker button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: inherit;
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.guide-actions button,
+.wizard-intro button,
+.wizard-row button,
+.wizard-footer button {
+  padding: 0 12px;
+}
+
+.wizard-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.wizard-steps button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 8px;
+  text-align: left;
+}
+
+.wizard-steps span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.wizard-steps strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wizard-steps button.active,
+.wizard-steps button.done {
+  border-color: rgba(56, 217, 130, 0.34);
+  background: rgba(56, 217, 130, 0.1);
+}
+
+.wizard-steps button.active span,
+.wizard-steps button.done span {
+  background: var(--green);
+  color: #06120c;
+}
+
+.wizard-body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wizard-intro,
+.wizard-library-summary {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid rgba(80, 167, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(80, 167, 255, 0.065);
+}
+
+.wizard-intro.legal {
+  border-color: rgba(244, 199, 93, 0.28);
+  background: rgba(244, 199, 93, 0.075);
+}
+
+.wizard-intro p,
+.wizard-library-summary p,
+.wizard-row p,
+.wizard-row small {
+  color: var(--muted);
+}
+
+.wizard-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wizard-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.wizard-row > span {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 27px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.wizard-row.ready > span {
+  background: rgba(56, 217, 130, 0.18);
+  color: var(--green);
+}
+
+.wizard-row.missing > span {
+  background: rgba(244, 199, 93, 0.17);
+  color: var(--yellow);
+}
+
+.wizard-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wizard-row strong,
+.wizard-row p,
+.wizard-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wizard-row small {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.wizard-row-actions,
+.wizard-game-actions,
+.wizard-footer > div {
+  display: inline-flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.wizard-console-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wizard-console-picker button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.wizard-console-picker button.active {
+  border-color: rgba(56, 217, 130, 0.42);
+  background: rgba(56, 217, 130, 0.13);
+  color: var(--green);
+}
+
+.wizard-console-picker small {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.wizard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+#setupWizardNextButton {
+  border-color: rgba(56, 217, 130, 0.34);
+  background: rgba(56, 217, 130, 0.14);
+  color: var(--green);
+}
+
+#setupWizardSkipButton {
+  color: var(--muted);
+}
+
+.browse-toolbar {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  min-width: 0;
+}
+
+.browse-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.browse-search span {
+  color: var(--muted);
+}
+
+.browse-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  overflow: visible;
+}
+
+.browse-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.browse-tabs button.active {
+  border-color: rgba(46, 230, 129, 0.42);
+  background: rgba(46, 230, 129, 0.13);
+  color: var(--green);
+}
+
+.browse-tabs small {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.browse-summary {
+  color: var(--muted);
+}
+
+.browse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+  min-width: 0;
+}
+
+.browse-game-card {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.browse-game-card.selected {
+  border-color: rgba(46, 230, 129, 0.52);
+  background: rgba(46, 230, 129, 0.075);
+}
+
+.browse-cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(244, 199, 93, 0.9), rgba(155, 114, 255, 0.7)),
+    #232733;
+  background-position: center;
+  background-size: cover;
+}
+
+.browse-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.32), transparent 34%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.62), transparent 46%);
+}
+
+.browse-cover span {
+  position: relative;
+  z-index: 2;
+  max-width: 82%;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 28px;
+  font-weight: 950;
+  text-align: center;
+}
+
+.browse-cover.has-art span {
+  display: none;
+}
+
+.browse-cover em {
+  position: absolute;
+  left: 9px;
+  bottom: 9px;
+  z-index: 2;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: var(--yellow);
+  color: #160f04;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.browse-game-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.browse-game-copy strong,
+.browse-game-copy p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browse-game-copy p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.browse-game-actions {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.favorite-button {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 0;
+  color: #d9e4ec;
+  font-size: 22px;
+}
+
+.favorite-button.active {
+  border-color: rgba(244, 199, 93, 0.42);
+  background: rgba(244, 199, 93, 0.13);
+  color: var(--yellow);
+}
+
+.browse-play {
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.browse-play.blocked {
+  border-color: rgba(244, 199, 93, 0.32);
+  color: var(--yellow);
+}
+
+.browse-empty {
+  grid-column: 1 / -1;
+  display: grid;
+  place-items: start;
+  gap: 6px;
+  min-height: 160px;
+  padding: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+}
+
+.browse-empty p {
+  color: var(--muted);
+}
+
+.settings-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 13px;
+}
+
+.settings-toolbar span {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(56, 217, 130, 0.14);
+  color: var(--green);
+  font-weight: 950;
+}
+
+#settingsResetButton {
+  border-color: rgba(244, 199, 93, 0.28);
+  color: var(--yellow);
+}
+
+#settingsResetButton span {
+  background: rgba(244, 199, 93, 0.15);
+  color: var(--yellow);
+}
+
+.settings-section-head {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin-bottom: 9px;
+}
+
+.settings-section-head strong {
+  font-size: 16px;
+}
+
+.settings-section-head span,
+.settings-row p,
+.settings-row small {
+  color: var(--muted);
+}
+
+.settings-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.settings-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-row strong,
+.settings-row p,
+.settings-row small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-row small {
+  white-space: normal;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.settings-row-actions {
+  display: inline-flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.settings-row button {
+  min-height: 34px;
+  padding: 0 11px;
+}
+
+.emulator-settings-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.emulator-settings-row > span {
+  display: grid;
+  place-items: center;
+  min-width: 62px;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(244, 199, 93, 0.16);
+  color: var(--yellow);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.emulator-settings-row.ready > span {
+  background: rgba(56, 217, 130, 0.18);
+  color: var(--green);
 }
 
 .controller-summary {
@@ -2069,7 +2789,8 @@ body {
   display: none;
 }
 
-.system-icon {
+.system-icon,
+.system-logo {
   justify-content: start;
   width: 30px;
   color: var(--green);
@@ -2077,26 +2798,66 @@ body {
   font-weight: 950;
 }
 
-.system-gamecube .system-icon {
+.system-logo {
+  height: 30px;
+}
+
+.system-logo svg {
+  width: 28px;
+  height: 28px;
+}
+
+.system-logo-all {
+  justify-content: center;
+}
+
+.system-gamecube .system-icon,
+.system-gamecube .system-logo {
   color: var(--purple);
 }
 
 .system-wii .system-icon,
-.system-psp .system-icon {
+.system-wii .system-logo,
+.system-psp .system-icon,
+.system-psp .system-logo {
   color: var(--blue);
 }
 
 .system-ps2 .system-icon,
-.system-ps1 .system-icon {
+.system-ps2 .system-logo,
+.system-ps1 .system-icon,
+.system-ps1 .system-logo {
   color: #27a6ff;
 }
 
-.system-xbox .system-icon {
+.system-xbox .system-icon,
+.system-xbox .system-logo {
   color: #68df3b;
 }
 
-.system-nintendods .system-icon {
+.system-nintendods .system-icon,
+.system-nintendods .system-logo {
   color: #ff4a43;
+}
+
+.system-logo-wii {
+  font-size: 16px;
+  font-weight: 780;
+  letter-spacing: -0.5px;
+  text-transform: none;
+}
+
+.system-logo-ps2,
+.system-logo-ps1,
+.system-logo-psp {
+  font-size: 17px;
+  font-style: italic;
+  letter-spacing: -0.5px;
+}
+
+.system-logo-nintendods {
+  font-size: 18px;
+  letter-spacing: -0.4px;
 }
 
 .system-name {
@@ -2374,12 +3135,20 @@ body {
   place-items: center;
   width: 24px;
   height: 24px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 50%;
   background: rgba(7, 12, 16, 0.72);
   color: #e8eff4;
+  cursor: pointer;
   font-size: 10px;
   font-style: normal;
   letter-spacing: 1px;
+}
+
+.poster-menu:not(:disabled):hover {
+  border-color: rgba(46, 230, 129, 0.42);
+  background: rgba(46, 230, 129, 0.16);
 }
 
 .poster em {
@@ -2509,6 +3278,188 @@ body {
   color: var(--muted);
   font-style: normal;
   font-size: 24px;
+}
+
+.stage {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 16px 18px 18px;
+}
+
+.stage:has(.setup-banner.hidden) {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.stage:has(.setup-banner.hidden) .setup-banner.hidden {
+  display: none;
+}
+
+.topbar {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.topbar > div:first-child {
+  flex: 0 1 220px;
+}
+
+.topbar h2 {
+  margin-top: 2px;
+  font-size: 28px;
+}
+
+.actions {
+  flex: 1 1 auto;
+  gap: 8px;
+}
+
+.actions button {
+  min-height: 38px;
+  padding: 0 11px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.actions .action-icon {
+  width: 21px;
+  height: 21px;
+}
+
+.library-panel {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.library-head h3 {
+  margin-top: 0;
+  font-size: 16px;
+}
+
+.page-browse-controls {
+  gap: 8px;
+}
+
+.browse-search {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.browse-tabs[hidden] {
+  display: none;
+}
+
+.browse-tabs {
+  gap: 6px;
+}
+
+.browse-tabs button {
+  min-height: 34px;
+  padding: 0 10px;
+  gap: 6px;
+}
+
+.browse-tabs small {
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+.browse-summary {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.game-shelf.library-grid {
+  grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+  gap: 10px;
+  padding: 0 2px 10px 0;
+}
+
+.browse-game-card {
+  gap: 7px;
+  padding: 8px;
+}
+
+.browse-cover {
+  aspect-ratio: 3 / 4;
+  background-color: #101920;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.browse-cover.has-art {
+  background: transparent;
+}
+
+.browse-cover.has-art::after {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.14), transparent 30%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.34), transparent 42%);
+}
+
+.browse-game-copy strong {
+  font-size: 14px;
+}
+
+.browse-game-actions {
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.browse-game-actions button {
+  min-height: 34px;
+}
+
+.favorite-button {
+  font-size: 20px;
+}
+
+.detail-rail {
+  padding: 56px 18px 18px 0;
+}
+
+.selected-game {
+  grid-template-rows: 188px minmax(0, 1fr);
+}
+
+.detail-art.has-art,
+.poster.has-art {
+  background: transparent;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.browse-game-card button:not(:disabled):hover,
+.browse-cover:not(:disabled):hover,
+.game-card:not(:disabled):hover .poster {
+  transform: none;
+}
+
+.browse-cover,
+.game-cover-image,
+.poster {
+  transition-property: border-color, background, color, opacity, box-shadow;
+}
+
+.browse-game-card:hover .game-cover-image,
+.browse-cover:hover .game-cover-image,
+.game-cover-image:hover {
+  transform: none;
+}
+
+.artwork-thumb {
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.hero-panel,
+.browse-overlay {
+  display: none !important;
 }
 
 @media (max-width: 1180px) {
@@ -2659,8 +3610,11 @@ body {
   .topbar,
   .actions,
   .guide-sheet header,
+  .setup-wizard-sheet header,
+  .settings-sheet header,
   .controller-sheet header,
   .artwork-sheet header,
+  .settings-toolbar,
   .controller-apply,
   .mapper-ready,
   .mapper-empty,
@@ -2683,6 +3637,8 @@ body {
   }
 
   .guide-steps,
+  .wizard-steps,
+  .browse-toolbar,
   .controller-layout,
   .controller-notes,
   .controller-setup-list,
@@ -2694,6 +3650,31 @@ body {
 
   .guide-table div {
     grid-template-columns: 1fr;
+  }
+
+  .wizard-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .wizard-row > span {
+    justify-self: start;
+  }
+
+  .wizard-row-actions,
+  .wizard-footer,
+  .wizard-footer > div {
+    justify-content: flex-start;
+  }
+
+  .settings-row,
+  .emulator-settings-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .settings-row-actions {
+    justify-content: flex-start;
   }
 
   .guide-table button {

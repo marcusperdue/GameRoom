@@ -20,11 +20,16 @@ let lastUiControllerActionAt = 0;
 let controllerNavSection = "library";
 let uiAudioContext = null;
 const uiSoundLastPlayed = {};
+let browseFilter = "All";
+let browseSearchTerm = "";
+let playingGameId = "";
+let activeLaunchId = "";
+let setupWizardStep = 0;
+let setupWizardDismissed = false;
 
 const systemNav = document.querySelector("#systemNav");
 const gameList = document.querySelector("#gameList");
 const selectedGame = document.querySelector("#selectedGame");
-const heroGame = document.querySelector("#heroGame");
 const healthList = document.querySelector("#healthList");
 const healthBadge = document.querySelector("#healthBadge");
 const setupBanner = document.querySelector("#setupBanner");
@@ -32,6 +37,7 @@ const setupTitle = document.querySelector("#setupTitle");
 const setupSummary = document.querySelector("#setupSummary");
 const systemTitle = document.querySelector("#systemTitle");
 const libraryTitle = document.querySelector("#libraryTitle");
+const libraryPanel = document.querySelector(".library-panel");
 const rootPath = document.querySelector("#rootPath");
 const storageText = document.querySelector("#storageText");
 const searchInput = document.querySelector("#searchInput");
@@ -41,7 +47,22 @@ const snapshotButton = document.querySelector("#snapshotButton");
 const guideButton = document.querySelector("#guideButton");
 const guideOverlay = document.querySelector("#guideOverlay");
 const guideCloseButton = document.querySelector("#guideCloseButton");
+const guideSetupButton = document.querySelector("#guideSetupButton");
 const guideTable = document.querySelector("#guideTable");
+const setupWizardOverlay = document.querySelector("#setupWizardOverlay");
+const setupWizardSteps = document.querySelector("#setupWizardSteps");
+const setupWizardBody = document.querySelector("#setupWizardBody");
+const setupWizardCloseButton = document.querySelector("#setupWizardCloseButton");
+const setupWizardSkipButton = document.querySelector("#setupWizardSkipButton");
+const setupWizardBackButton = document.querySelector("#setupWizardBackButton");
+const setupWizardNextButton = document.querySelector("#setupWizardNextButton");
+const settingsOverlay = document.querySelector("#settingsOverlay");
+const settingsCloseButton = document.querySelector("#settingsCloseButton");
+const settingsFolderList = document.querySelector("#settingsFolderList");
+const settingsEmulatorList = document.querySelector("#settingsEmulatorList");
+const settingsWizardButton = document.querySelector("#settingsWizardButton");
+const settingsScanButton = document.querySelector("#settingsScanButton");
+const settingsResetButton = document.querySelector("#settingsResetButton");
 const controllerOverlay = document.querySelector("#controllerOverlay");
 const controllerCloseButton = document.querySelector("#controllerCloseButton");
 const controllerRefreshButton = document.querySelector("#controllerRefreshButton");
@@ -60,6 +81,10 @@ const archiveSearchButton = document.querySelector("#archiveSearchButton");
 const googleImagesButton = document.querySelector("#googleImagesButton");
 const artworkUrlInput = document.querySelector("#artworkUrlInput");
 const artworkUrlSaveButton = document.querySelector("#artworkUrlSaveButton");
+const pageBrowseControls = document.querySelector("#pageBrowseControls");
+const pageBrowseSearchInput = document.querySelector("#pageBrowseSearchInput");
+const pageBrowseTabs = document.querySelector("#pageBrowseTabs");
+const pageBrowseSummary = document.querySelector("#pageBrowseSummary");
 const importBiosButton = document.querySelector("#importBiosButton");
 const dropZone = document.querySelector("#dropZone");
 const shell = document.querySelector(".shell");
@@ -84,6 +109,13 @@ const guideSystems = [
   "NintendoDS",
   "PS1",
   "PSP"
+];
+
+const setupWizardStepDefs = [
+  { key: "folders", label: "Folders" },
+  { key: "emulators", label: "Emulators" },
+  { key: "bios", label: "BIOS" },
+  { key: "games", label: "Games" }
 ];
 
 const mappingSteps = [
@@ -146,6 +178,7 @@ async function boot() {
   selectedSystem = "All";
   selectedGameId = state.library[0]?.id ?? null;
   render();
+  if (shouldAutoOpenSetupWizard()) openSetupWizard(0);
   startUiControllerNavigation();
 }
 
@@ -156,8 +189,9 @@ function render() {
   renderSetup();
   renderSystems();
   renderLibrary();
-  renderHero();
   renderSelected();
+  if (settingsOverlay?.classList.contains("show")) renderSettings();
+  if (setupWizardOverlay?.classList.contains("show")) renderSetupWizard();
 }
 
 function renderScanButton() {
@@ -176,7 +210,7 @@ function renderSystems() {
       const issue = system === "All" ? activeIssues()[0] : issueForSystem(system);
       const status = issue ? "Setup" : count ? String(count) : "Empty";
       return `<button class="system-card ${systemClass(system)} ${selectedSystem === system ? "active" : ""} ${issue ? "needs" : ""}" data-system="${system}" type="button">
-        <span class="system-icon">${meta.icon}</span>
+        ${renderSystemLogo(system)}
         <span class="system-name">${escapeHtml(meta.label)}</span>
         <small>${escapeHtml(status)}</small>
       </button>`;
@@ -184,12 +218,54 @@ function renderSystems() {
     .join("");
 }
 
+function renderSystemLogo(system) {
+  const safeSystem = systemClass(system).replace(/^system-/, "");
+  const textLogos = {
+    Wii: "Wii",
+    PS2: "PS2",
+    NintendoDS: "DS",
+    PS1: "PS",
+    PSP: "PSP"
+  };
+
+  if (system === "All") {
+    return `<span class="system-logo system-logo-all" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+    </span>`;
+  }
+
+  if (system === "GameCube") {
+    return `<span class="system-logo system-logo-gamecube" aria-hidden="true">
+      <svg viewBox="0 0 32 32" focusable="false">
+        <path d="M16 2.8 28 9.5v13L16 29.2 4 22.5v-13L16 2.8Z" />
+        <path d="M16 8.7 22.8 12.5v7.2L16 23.5l-6.8-3.8v-7.2L16 8.7Z" />
+        <path d="M16 8.7v14.8M9.2 12.5l13.6 7.2M22.8 12.5 9.2 19.7" />
+      </svg>
+    </span>`;
+  }
+
+  if (system === "Xbox") {
+    return `<span class="system-logo system-logo-xbox" aria-hidden="true">
+      <svg viewBox="0 0 32 32" focusable="false">
+        <path d="M7 7c5.7 3.2 12.3 15.8 18 18M25 7C19.3 10.2 12.7 22.8 7 25" />
+      </svg>
+    </span>`;
+  }
+
+  return `<span class="system-logo system-logo-${safeSystem}" aria-hidden="true">${escapeHtml(textLogos[system] || system.slice(0, 3).toUpperCase())}</span>`;
+}
+
 function renderLibrary() {
-  const games = visibleGames();
+  const games = browseGames();
   const meta = systemMeta[selectedSystem] || { label: selectedSystem };
   systemTitle.textContent = selectedSystem === "All" ? "All Games" : meta.label;
-  libraryTitle.textContent = selectedSystem === "All" ? "Recently Added" : meta.label;
-  dropZone.classList.toggle("compact", games.length > 0);
+  libraryTitle.textContent = "Browse Games";
+  shell.classList.add("browse-active");
+  libraryPanel.classList.add("browse-mode");
+  pageBrowseControls.hidden = false;
+  dropZone.hidden = true;
+  gameList.className = "game-shelf library-grid";
+  renderPageBrowseControls();
 
   if (games.length && !games.some((game) => game.id === selectedGameId)) {
     selectedGameId = games[0].id;
@@ -198,71 +274,12 @@ function renderLibrary() {
   }
 
   gameList.innerHTML = games.length
-    ? games.map(renderGameRow).join("")
+    ? games.map(renderBrowseGameCard).join("")
     : `<div class="empty-state">
         <strong>No games here yet</strong>
-        <p>${selectedSystem === "All" ? "Add a game and GameRoom will sort it." : `Drop ${escapeHtml(meta.label)} games here or use Add Games.`}</p>
+        <p>Add games or choose another filter.</p>
         <button id="emptyAddButton" type="button">Add Games</button>
       </div>`;
-}
-
-function renderGameRow(game) {
-  const cover = coverUrl(game);
-  const issue = issueForSystem(game.system);
-  return `<button class="game-card ${systemClass(game.system)} ${selectedGameId === game.id ? "selected" : ""} ${issue ? "needs" : ""}" data-game-id="${game.id}" type="button">
-    <div class="poster ${cover ? "has-art" : ""}"${coverStyle(game)}>
-      <strong class="poster-badge">${escapeHtml(labelFor(game.system))}</strong>
-      <i class="poster-menu" aria-hidden="true">•••</i>
-      <span>${cover ? "" : coverText(game)}</span>
-      ${issue ? "<em>Setup</em>" : ""}
-    </div>
-    <div class="game-copy">
-      <strong>${escapeHtml(game.title)}</strong>
-      <span>${labelFor(game.system)} · ${game.format} · ${game.size}</span>
-    </div>
-  </button>`;
-}
-
-function renderHero() {
-  const game = state.library.find((item) => item.id === selectedGameId);
-  if (!game) {
-    const meta = systemMeta[selectedSystem] || { label: selectedSystem };
-    const title = selectedSystem === "All" ? "Add your first game" : `Add ${meta.label} games`;
-    const copy = selectedSystem === "All" ? "Pick a console, add games, then press Play." : `Drop ${meta.label} games here or use Add Games.`;
-    heroGame.innerHTML = `<div class="hero-backdrop empty-backdrop"><span>GR</span></div>
-      <div class="hero-content">
-        <div class="hero-copy">
-          <p class="eyebrow">${selectedSystem === "All" ? "GameRoom" : escapeHtml(meta.label)}</p>
-          <h2>${escapeHtml(title)}</h2>
-          <p>${escapeHtml(copy)}</p>
-          <button class="hero-play" id="heroAddButton" type="button"><span class="action-icon plus-icon" aria-hidden="true"></span>Add Games</button>
-        </div>
-      </div>`;
-    return;
-  }
-
-  const issue = issueForSystem(game.system);
-  const cover = coverUrl(game);
-  heroGame.innerHTML = `<div class="hero-backdrop ${cover ? "has-art" : ""}"${coverStyle(game)}>
-      <span>${coverText(game)}</span>
-    </div>
-    <div class="hero-content">
-      <div class="hero-copy">
-        <p class="hero-tag">${escapeHtml(labelFor(game.system))}</p>
-        <h2>${escapeHtml(game.title)}</h2>
-        <p>${issue ? "Finish setup before launching this game." : `${escapeHtml(game.emulator || "")} · ${escapeHtml(game.format)} · ${escapeHtml(game.size)}`}</p>
-        <div class="hero-actions">
-          <button class="hero-play ${issue ? "blocked" : ""}" data-play type="button"><span>${issue ? "!" : "▶"}</span>${issue ? "Finish Setup" : "Play"}</button>
-          <button class="round-action" data-folder="gameRoot" type="button" aria-label="More game options">•••</button>
-        </div>
-      </div>
-      <div class="hero-stats">
-        <span>${escapeHtml(game.format)}</span>
-        <span>${escapeHtml(game.size)}</span>
-        <span>${escapeHtml(game.emulator || "Emulator")}</span>
-        <i aria-hidden="true"></i>
-      </div>
-    </div>`;
 }
 
 function renderSelected() {
@@ -285,14 +302,16 @@ function renderSelected() {
 
   const issue = issueForSystem(game.system);
   const cover = coverUrl(game);
+  const favorite = isFavorite(game.id);
+  const playing = playingGameId === game.id;
   selectedGame.innerHTML = `
-    <div class="detail-art ${cover ? "has-art" : ""}"${coverStyle(game)}>
-      <span>${coverText(game)}</span>
+    <div class="detail-art ${cover ? "has-art" : ""}">
+      ${cover ? coverImage(game, "game-cover-image", `${game.title} cover`) : `<span>${coverText(game)}</span>`}
     </div>
     <div class="detail-copy">
       <div class="detail-head">
         <p class="eyebrow">${labelFor(game.system)}</p>
-        <button type="button" data-artwork-center aria-label="Change artwork">♡</button>
+        <button class="favorite-button ${favorite ? "active" : ""}" type="button" data-favorite-toggle="${escapeAttribute(game.id)}" aria-label="${favorite ? "Remove from favorites" : "Add to favorites"}">${favorite ? "♥" : "♡"}</button>
       </div>
       <h2>${escapeHtml(game.title)}</h2>
       <div class="meta">
@@ -301,7 +320,7 @@ function renderSelected() {
         <span>${escapeHtml(game.emulator || "")}</span>
       </div>
       ${issue ? renderSetupHint(issue) : `<p class="path">${escapeHtml(displayPath(game.path))}</p>`}
-      <button id="playButton" class="primary ${issue ? "blocked" : ""}" data-play type="button"><span>${issue ? "!" : "▶"}</span>${issue ? "Finish Setup" : "Play Game"}</button>
+      <button id="playButton" class="primary ${issue ? "blocked" : ""} ${playing ? "playing" : ""}" data-play type="button"><span>${issue ? "!" : playing ? "■" : "▶"}</span>${issue ? "Finish Setup" : playing ? "Playing" : "Play Game"}</button>
       <div class="detail-actions">
         <button data-folder="gameRoot" type="button"><span>▣</span><strong>Open Game Folder</strong><i>›</i></button>
         <button data-folder="saveRoot" type="button"><span>☆</span><strong>Manage Saves</strong><i>›</i></button>
@@ -378,14 +397,6 @@ function issueForSystem(system) {
   return activeIssues().find((item) => item.label.startsWith(`${system} `)) || null;
 }
 
-function visibleGames() {
-  const term = searchInput.value.trim().toLowerCase();
-  return state.library.filter((game) => {
-    const systemMatch = selectedSystem === "All" || game.system === selectedSystem;
-    return systemMatch && game.title.toLowerCase().includes(term);
-  });
-}
-
 function countBySystem() {
   return state.library.reduce((acc, game) => {
     acc[game.system] = (acc[game.system] || 0) + 1;
@@ -420,6 +431,11 @@ function coverUrl(game) {
 function coverStyle(game) {
   const cover = coverUrl(game);
   return cover ? ` style="background-image:url(&quot;${escapeAttribute(cover)}&quot;)"` : "";
+}
+
+function coverImage(game, className, alt = "") {
+  const cover = coverUrl(game);
+  return cover ? `<img class="${escapeAttribute(className)}" src="${escapeAttribute(cover)}" alt="${escapeAttribute(alt)}" loading="lazy" draggable="false" />` : "";
 }
 
 function displayPath(value) {
@@ -567,6 +583,430 @@ function openGuide() {
 function closeGuide() {
   guideOverlay.classList.remove("show");
   guideOverlay.setAttribute("aria-hidden", "true");
+}
+
+function shouldAutoOpenSetupWizard() {
+  return Boolean(
+    state &&
+    !setupWizardDismissed &&
+    !state.config?.setupWizardCompleted &&
+    state.library.length === 0
+  );
+}
+
+function openSetupWizard(step = 0) {
+  setupWizardStep = clamp(step, 0, setupWizardStepDefs.length - 1);
+  setupWizardDismissed = true;
+  renderSetupWizard();
+  setupWizardOverlay.classList.add("show");
+  setupWizardOverlay.setAttribute("aria-hidden", "false");
+}
+
+function closeSetupWizard() {
+  setupWizardOverlay.classList.remove("show");
+  setupWizardOverlay.setAttribute("aria-hidden", "true");
+}
+
+async function completeSetupWizard(button = setupWizardNextButton) {
+  state = await withLoading(button, {
+    buttonLabel: "Saving",
+    status: "Saving setup"
+  }, () => window.gameRoom.saveConfig({
+    setupWizardCompleted: true,
+    setupCompletedAt: new Date().toISOString()
+  }));
+  closeSetupWizard();
+  render();
+  showToast("Setup saved");
+}
+
+function renderSetupWizard() {
+  if (!setupWizardOverlay || !setupWizardSteps || !setupWizardBody) return;
+  const step = setupWizardStepDefs[setupWizardStep] || setupWizardStepDefs[0];
+
+  setupWizardSteps.innerHTML = setupWizardStepDefs.map((item, index) => `<button class="${index === setupWizardStep ? "active" : ""} ${index < setupWizardStep ? "done" : ""}" data-wizard-step="${index}" type="button">
+    <span>${index + 1}</span>
+    <strong>${escapeHtml(item.label)}</strong>
+  </button>`).join("");
+
+  if (step.key === "folders") setupWizardBody.innerHTML = renderWizardFolders();
+  if (step.key === "emulators") setupWizardBody.innerHTML = renderWizardEmulators();
+  if (step.key === "bios") setupWizardBody.innerHTML = renderWizardBios();
+  if (step.key === "games") setupWizardBody.innerHTML = renderWizardGames();
+
+  setupWizardBackButton.disabled = setupWizardStep === 0;
+  setupWizardNextButton.textContent = setupWizardStep === setupWizardStepDefs.length - 1 ? "Finish" : "Next";
+}
+
+function renderWizardFolders() {
+  const folderRows = [
+    { key: "gameRoot", title: "Games", detail: "Game files go here." },
+    { key: "biosRoot", title: "BIOS", detail: "Required console files go here." },
+    { key: "emulatorRoot", title: "Emulators", detail: "Portable emulator apps can go here." }
+  ];
+
+  return `<div class="wizard-intro">
+    <strong>Choose your main folders</strong>
+    <p>Defaults are already created inside GameRoom. Change them if you keep games or BIOS files somewhere else.</p>
+  </div>
+  <div class="wizard-list">
+    ${folderRows.map((row) => `<article class="wizard-row">
+      <span>${escapeHtml(row.title.slice(0, 2).toUpperCase())}</span>
+      <div>
+        <strong>${escapeHtml(row.title)} Folder</strong>
+        <p>${escapeHtml(row.detail)}</p>
+        <small>${escapeHtml(displayPath(state.config[row.key]))}</small>
+      </div>
+      <div class="wizard-row-actions">
+        <button data-wizard-choose-folder="${escapeAttribute(row.key)}" type="button">Choose</button>
+        <button data-wizard-open-folder="${escapeAttribute(row.key)}" type="button">Open</button>
+      </div>
+    </article>`).join("")}
+  </div>`;
+}
+
+function renderWizardEmulators() {
+  const rows = Object.keys(state.systems).map((systemName) => {
+    const system = state.systems[systemName];
+    const profile = state.profiles[systemName] || {};
+    const health = state.health.find((item) => item.label === `${systemName} emulator`);
+    const ready = Boolean(health?.ok);
+    return `<article class="wizard-row ${ready ? "ready" : "missing"}">
+      <span>${ready ? "Found" : "Need"}</span>
+      <div>
+        <strong>${escapeHtml(labelFor(systemName))}</strong>
+        <p>${escapeHtml(system.emulator)}</p>
+        <small>${escapeHtml(displayPath(profile.command || "Not configured"))}</small>
+      </div>
+      <div class="wizard-row-actions">
+        <button data-wizard-choose-emulator="${escapeAttribute(systemName)}" type="button">Browse</button>
+        <button data-download-emulator="${escapeAttribute(systemName)}" type="button">Download</button>
+      </div>
+    </article>`;
+  }).join("");
+
+  return `<div class="wizard-intro">
+    <strong>Find emulator apps</strong>
+    <p>GameRoom checks the Emulators folder, common install locations, and PATH. Browse manually when needed.</p>
+    <button data-wizard-scan-emulators type="button">Find Emulators</button>
+  </div>
+  <div class="wizard-list">${rows}</div>`;
+}
+
+function renderWizardBios() {
+  const requiredSystems = Object.keys(state.profiles).filter((systemName) => state.profiles[systemName]?.bios === "required");
+  const rows = requiredSystems.map((systemName) => {
+    const health = state.health.find((item) => item.label === `${systemName} BIOS/files`);
+    const ready = Boolean(health?.ok);
+    return `<article class="wizard-row ${ready ? "ready" : "missing"}">
+      <span>${ready ? "Ready" : "Need"}</span>
+      <div>
+        <strong>${escapeHtml(labelFor(systemName))}</strong>
+        <p>${escapeHtml(biosSetupNote(systemName))}</p>
+        <small>${escapeHtml(displayPath(health?.detail || pathForBiosSystem(systemName)))}</small>
+      </div>
+      <div class="wizard-row-actions">
+        <button data-wizard-open-bios="${escapeAttribute(systemName)}" type="button">Open</button>
+      </div>
+    </article>`;
+  }).join("");
+
+  return `<div class="wizard-intro legal">
+    <strong>Add only your own console files</strong>
+    <p>GameRoom does not include BIOS, firmware, keys, hard drive images, games, or ROMs. Use files dumped from hardware you own.</p>
+    <button data-wizard-import-bios type="button">Import From Batocera</button>
+  </div>
+  <div class="wizard-list">${rows}</div>`;
+}
+
+function renderWizardGames() {
+  const counts = countBySystem();
+  const systemButtons = ["All", ...Object.keys(state.systems)].map((systemName) => `<button class="${selectedSystem === systemName ? "active" : ""}" data-wizard-select-system="${escapeAttribute(systemName)}" type="button">
+    <span>${escapeHtml(labelFor(systemName))}</span>
+    <small>${systemName === "All" ? state.library.length : counts[systemName] || 0}</small>
+  </button>`).join("");
+
+  return `<div class="wizard-intro">
+    <strong>Import the first game</strong>
+    <p>Pick a console before adding ISO files so GameRoom knows where to copy them.</p>
+    <div class="wizard-game-actions">
+      <button data-wizard-import-games type="button">Add Games</button>
+      <button data-wizard-scan-library type="button">Scan Library</button>
+    </div>
+  </div>
+  <div class="wizard-console-picker">${systemButtons}</div>
+  <div class="wizard-library-summary">
+    <strong>${state.library.length} game${state.library.length === 1 ? "" : "s"} indexed</strong>
+    <p>${state.library.length ? "Finish setup or keep adding more games." : "No games indexed yet."}</p>
+  </div>`;
+}
+
+function biosSetupNote(systemName) {
+  const notes = {
+    PS2: "Requires a PS2 BIOS dumped from your console.",
+    PS1: "Requires a PS1 BIOS for best compatibility.",
+    Xbox: "Requires MCPX, BIOS/flash, and hard drive image files."
+  };
+  return notes[systemName] || "May require console files dumped from your hardware.";
+}
+
+function pathForBiosSystem(systemName) {
+  const system = state.systems[systemName];
+  return childPath(state.config.biosRoot, system?.folder || systemName);
+}
+
+function childPath(root, child) {
+  return `${String(root || "").replace(/[\\/]+$/g, "")}/${child}`;
+}
+
+function openSettings() {
+  renderSettings();
+  settingsOverlay.classList.add("show");
+  settingsOverlay.setAttribute("aria-hidden", "false");
+}
+
+function closeSettings() {
+  settingsOverlay.classList.remove("show");
+  settingsOverlay.setAttribute("aria-hidden", "true");
+}
+
+function favoriteIds() {
+  return new Set(Array.isArray(state?.config?.favoriteGameIds) ? state.config.favoriteGameIds : []);
+}
+
+function isFavorite(gameId) {
+  return favoriteIds().has(gameId);
+}
+
+async function toggleFavorite(gameId, button = null) {
+  const game = state.library.find((item) => item.id === gameId);
+  if (!game) {
+    showToast("Pick a game first");
+    return;
+  }
+
+  const favorites = favoriteIds();
+  const nextFavorite = !favorites.has(gameId);
+  if (nextFavorite) {
+    favorites.add(gameId);
+  } else {
+    favorites.delete(gameId);
+  }
+
+  state = await withLoading(button, {
+    buttonLabel: nextFavorite ? "Saving" : "Removing",
+    status: "Updating favorites"
+  }, () => window.gameRoom.saveConfig({ favoriteGameIds: Array.from(favorites) }));
+  render();
+  showToast(nextFavorite ? `Added ${game.title} to favorites` : `Removed ${game.title} from favorites`);
+}
+
+function renderPageBrowseControls() {
+  if (!pageBrowseTabs || !pageBrowseSummary) return;
+  const showFilters = selectedSystem === "All";
+  pageBrowseTabs.hidden = !showFilters;
+  if (showFilters) {
+    renderBrowseTabs(pageBrowseTabs);
+  } else {
+    pageBrowseTabs.innerHTML = "";
+  }
+  if (pageBrowseSearchInput) {
+    pageBrowseSearchInput.placeholder = selectedSystem === "All" ? "Search all games" : `Search ${labelFor(selectedSystem)} games`;
+  }
+  const games = browseGames();
+  const activeFilter = activeBrowseFilter();
+  pageBrowseSummary.textContent = `${games.length} game${games.length === 1 ? "" : "s"} ${activeFilter === "All" ? "in your library" : `in ${activeFilter === "Favorites" ? "favorites" : labelFor(activeFilter)}`}`;
+}
+
+function renderBrowseTabs(target) {
+  const counts = countBySystem();
+  const favoriteCount = state.library.filter((game) => isFavorite(game.id)).length;
+  const filters = [
+    { key: "All", label: "All", count: state.library.length },
+    { key: "Favorites", label: "Favorites", count: favoriteCount },
+    ...Object.keys(state.systems).map((systemName) => ({ key: systemName, label: labelFor(systemName), count: counts[systemName] || 0 }))
+  ];
+
+  target.innerHTML = filters.map((filter) => `<button class="${browseFilter === filter.key ? "active" : ""}" data-browse-filter="${escapeAttribute(filter.key)}" type="button">
+    <span>${escapeHtml(filter.label)}</span>
+    <small>${filter.count}</small>
+  </button>`).join("");
+}
+
+function browseGames() {
+  const term = browseSearchTerm.trim().toLowerCase();
+  const activeFilter = activeBrowseFilter();
+  return state.library.filter((game) => {
+    const filterMatch = activeFilter === "All" || (activeFilter === "Favorites" ? isFavorite(game.id) : game.system === activeFilter);
+    const searchMatch = !term || `${game.title} ${labelFor(game.system)} ${game.emulator || ""}`.toLowerCase().includes(term);
+    return filterMatch && searchMatch;
+  });
+}
+
+function activeBrowseFilter() {
+  return selectedSystem === "All" ? browseFilter : selectedSystem;
+}
+
+function renderBrowseGameCard(game) {
+  const cover = coverUrl(game);
+  const issue = issueForSystem(game.system);
+  const favorite = isFavorite(game.id);
+  const playing = playingGameId === game.id;
+  return `<article class="browse-game-card ${selectedGameId === game.id ? "selected" : ""} ${issue ? "needs" : ""}" data-game-id="${escapeAttribute(game.id)}" tabindex="0">
+    <button class="browse-cover ${cover ? "has-art" : ""}" data-browse-select="${escapeAttribute(game.id)}" type="button" aria-label="Select ${escapeAttribute(game.title)}">
+      ${cover ? coverImage(game, "game-cover-image", "") : `<span>${coverText(game)}</span>`}
+      ${issue ? "<em>Setup</em>" : ""}
+    </button>
+    <div class="browse-game-copy">
+      <strong>${escapeHtml(game.title)}</strong>
+      <p>${escapeHtml(labelFor(game.system))} · ${escapeHtml(game.format)} · ${escapeHtml(game.size)}</p>
+    </div>
+    <div class="browse-game-actions">
+      <button class="favorite-button ${favorite ? "active" : ""}" data-favorite-toggle="${escapeAttribute(game.id)}" type="button" aria-label="${favorite ? "Remove from favorites" : "Add to favorites"}">${favorite ? "♥" : "♡"}</button>
+      <button class="browse-play ${issue ? "blocked" : ""} ${playing ? "playing" : ""}" data-browse-play="${escapeAttribute(game.id)}" type="button">${issue ? "Setup" : playing ? "Playing" : "Play"}</button>
+    </div>
+  </article>`;
+}
+
+async function launchGameById(gameId, buttons = null) {
+  const game = state.library.find((item) => item.id === gameId);
+  if (!game) {
+    showToast("Pick a game first");
+    return;
+  }
+
+  selectedGameId = game.id;
+  const issue = issueForSystem(game.system);
+  if (issue) {
+    openSettings();
+    showToast(`${issue.label}: ${displayPath(issue.detail)}`);
+    return;
+  }
+
+  const result = await withLoading(buttons, {
+    buttonLabel: "Launching",
+    status: `Launching ${game.title}`
+  }, () => window.gameRoom.launchGame(game.id));
+  playingGameId = game.id;
+  activeLaunchId = result.launchId || "";
+  render();
+  showToast(`Launching ${result.game.title}`);
+}
+
+function handleGameEnded(payload = {}) {
+  if (!payload.gameId || playingGameId !== payload.gameId) return;
+  if (activeLaunchId && payload.launchId && activeLaunchId !== payload.launchId) return;
+  playingGameId = "";
+  activeLaunchId = "";
+  render();
+  showToast(`${payload.title || "Game"} closed`);
+}
+
+function renderSettings() {
+  if (!settingsFolderList || !settingsEmulatorList) return;
+
+  const folderRows = [
+    { key: "gameRoot", title: "Games Folder", note: "Put console game files here." },
+    { key: "biosRoot", title: "BIOS Folder", note: "Put required console files here." },
+    { key: "emulatorRoot", title: "Emulators Folder", note: "Put portable emulator apps here." },
+    { key: "saveRoot", title: "Saves Folder", note: "Game saves and memory card files." },
+    { key: "coverRoot", title: "Covers Folder", note: "Box art and custom covers." },
+    { key: "downloadsRoot", title: "Downloads Folder", note: "Installers, updates, and downloads." }
+  ];
+
+  settingsFolderList.innerHTML = folderRows.map((row) => {
+    const value = state.config[row.key] || "";
+    return `<article class="settings-row">
+      <div>
+        <strong>${escapeHtml(row.title)}</strong>
+        <p>${escapeHtml(row.note)}</p>
+        <small>${escapeHtml(displayPath(value))}</small>
+      </div>
+      <div class="settings-row-actions">
+        <button data-choose-folder="${escapeAttribute(row.key)}" type="button">Choose</button>
+        <button data-open-config-folder="${escapeAttribute(row.key)}" type="button">Open</button>
+      </div>
+    </article>`;
+  }).join("");
+
+  settingsEmulatorList.innerHTML = Object.keys(state.systems).map((systemName) => {
+    const system = state.systems[systemName];
+    const profile = state.profiles[systemName] || {};
+    const health = state.health.find((item) => item.label === `${systemName} emulator`);
+    const isReady = Boolean(health?.ok);
+    const status = isReady ? "Found" : "Missing";
+    const command = profile.command || "Not configured";
+    const openButton = isReady ? `<button data-open-emulator="${escapeAttribute(systemName)}" type="button">Open</button>` : "";
+    const downloadButton = system.downloadUrl ? `<button data-download-emulator="${escapeAttribute(systemName)}" type="button">Download</button>` : "";
+    return `<article class="settings-row emulator-settings-row ${isReady ? "ready" : "missing"}">
+      <span>${escapeHtml(status)}</span>
+      <div>
+        <strong>${escapeHtml(labelFor(systemName))}</strong>
+        <p>${escapeHtml(system.emulator)}</p>
+        <small>${escapeHtml(displayPath(command))}</small>
+      </div>
+      <div class="settings-row-actions">
+        <button data-choose-emulator="${escapeAttribute(systemName)}" type="button">Browse</button>
+        ${openButton}
+        ${downloadButton}
+      </div>
+    </article>`;
+  }).join("");
+}
+
+async function chooseSettingsFolder(folderKey, button) {
+  const currentPath = state.config[folderKey] || state.environment.rootDir;
+  const selectedPath = await window.gameRoom.chooseFolder(currentPath);
+  if (!selectedPath) return;
+
+  const nextState = await withLoading(button, {
+    buttonLabel: "Saving",
+    status: "Saving folder"
+  }, () => window.gameRoom.saveConfig({ [folderKey]: selectedPath }));
+  state = nextState;
+  if (!state.library.some((game) => game.id === selectedGameId)) {
+    selectedGameId = state.library[0]?.id ?? null;
+  }
+  render();
+  showToast("Folder updated");
+}
+
+async function chooseEmulatorFromSettings(systemName, button) {
+  const result = await withLoading(button, {
+    buttonLabel: "Choosing",
+    status: "Choosing emulator"
+  }, () => window.gameRoom.chooseEmulator(systemName));
+  if (result.canceled) return;
+  state = result.state;
+  render();
+  showToast(`${result.emulator} set to ${displayPath(result.command)}`);
+}
+
+async function scanEmulatorsFromSettings(button = settingsScanButton) {
+  const result = await withLoading(button, {
+    buttonLabel: "Finding",
+    status: "Finding emulators"
+  }, () => window.gameRoom.scanEmulators());
+  state = result.state;
+  render();
+  showToast(`Found ${result.found} emulator setup${result.found === 1 ? "" : "s"}`);
+}
+
+async function resetSetupFromSettings() {
+  const confirmed = window.confirm("Reset setup paths and emulator choices to the default GameRoom folders? Games and BIOS files will not be deleted.");
+  if (!confirmed) return;
+
+  const result = await withLoading(settingsResetButton, {
+    buttonLabel: "Resetting",
+    status: "Resetting setup"
+  }, () => window.gameRoom.resetSetup());
+  state = result.state;
+  selectedSystem = "All";
+  selectedGameId = state.library[0]?.id ?? null;
+  render();
+  closeSettings();
+  openSetupWizard(0);
+  showToast("Setup reset");
 }
 
 function renderGuideTable() {
@@ -1340,7 +1780,7 @@ function renderArtworkCenter() {
     <div class="artwork-thumb"${coverStyle(game)}><span>${coverText(game)}</span></div>
     <div>
       <strong>${escapeHtml(game.title)}</strong>
-      <p>${labelFor(game.system)} · ${escapeHtml(game.format)} · ${cover ? "Cover saved" : "No cover yet"}</p>
+      <p>${labelFor(game.system)} · ${escapeHtml(game.format)} · ${cover ? "Cover saved locally" : "No cover yet"}</p>
       ${cover ? `<small>${escapeHtml(displayPath(game.coverPath))}</small>` : "<small>Search Internet Archive or paste an image URL.</small>"}
     </div>
   </div>`;
@@ -1414,7 +1854,7 @@ async function saveArtwork(imageUrl, source = {}, triggerButton = artworkUrlSave
     artworkUrlInput.value = "";
     render();
     renderArtworkCenter();
-    showToast(`Saved cover for ${game.title}`);
+    showToast(`Saved local cover for ${game.title}`);
   } catch (error) {
     showToast(userErrorMessage(error));
   } finally {
@@ -1442,6 +1882,19 @@ async function refreshAfterImport(result) {
 
   showToast(result.skipped[0]?.reason || "No games imported");
 }
+
+async function importBatoceraBios(button = importBiosButton) {
+  const result = await withLoading(button, {
+    buttonLabel: "Importing",
+    status: "Importing BIOS files"
+  }, () => window.gameRoom.importBatoceraBios());
+  state = result.state;
+  render();
+  const copied = Object.values(result.report).reduce((sum, item) => sum + item.copied, 0);
+  showToast(`Imported ${copied} BIOS file${copied === 1 ? "" : "s"}`);
+  return result;
+}
+
 function renderInputTest(gamepad) {
   const buttons = gamepad.buttons.slice(0, 18).map((button, index) => {
     const value = Number(button.value || 0);
@@ -1677,6 +2130,8 @@ function moveControllerFocus(direction) {
 }
 
 function controllerNavScope() {
+  if (setupWizardOverlay.classList.contains("show")) return setupWizardOverlay;
+  if (settingsOverlay.classList.contains("show")) return settingsOverlay;
   if (controllerOverlay.classList.contains("show")) return controllerOverlay;
   if (artworkOverlay.classList.contains("show")) return artworkOverlay;
   if (guideOverlay.classList.contains("show")) return guideOverlay;
@@ -1767,6 +2222,18 @@ function closeControllerNavLayer() {
     return;
   }
 
+  if (settingsOverlay.classList.contains("show")) {
+    closeSettings();
+    focusControllerElement(document.querySelector("[data-settings-open]") || guideButton);
+    return;
+  }
+
+  if (setupWizardOverlay.classList.contains("show")) {
+    closeSetupWizard();
+    focusControllerElement(settingsWizardButton || guideButton);
+    return;
+  }
+
   if (guideOverlay.classList.contains("show")) {
     closeGuide();
     focusControllerElement(guideButton);
@@ -1789,7 +2256,7 @@ function activatePlayAction() {
     return;
   }
 
-  const playButton = selectedGame.querySelector("[data-play]") || heroGame.querySelector("[data-play]");
+  const playButton = selectedGame.querySelector("[data-play]");
   if (playButton && !playButton.disabled) {
     focusControllerElement(playButton);
     playButton.click();
@@ -1827,9 +2294,14 @@ function controllerSectionElement(section) {
 }
 
 function selectSystem(system) {
-  selectedSystem = system;
-  const games = visibleGames();
-  selectedGameId = games[0]?.id ?? state.library[0]?.id ?? null;
+  const nextSystem = system === "All" || state.systems[system] ? system : "All";
+  selectedSystem = nextSystem;
+  browseFilter = nextSystem === "All" ? "All" : nextSystem;
+  browseSearchTerm = "";
+  if (searchInput) searchInput.value = "";
+  if (pageBrowseSearchInput) pageBrowseSearchInput.value = "";
+  const games = browseGames();
+  selectedGameId = games[0]?.id ?? null;
   render();
 }
 
@@ -1851,9 +2323,20 @@ gameList.addEventListener("click", (event) => {
     return;
   }
 
-  const button = event.target.closest("button[data-game-id]");
-  if (!button) return;
-  selectedGameId = button.dataset.gameId;
+  if (event.target.closest("button")) return;
+
+  const card = event.target.closest("[data-game-id]");
+  if (!card) return;
+  selectedGameId = card.dataset.gameId;
+  render();
+});
+
+gameList.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const card = event.target.closest("[data-game-id]");
+  if (!card) return;
+  event.preventDefault();
+  selectedGameId = card.dataset.gameId;
   render();
 });
 
@@ -1870,27 +2353,39 @@ shell.addEventListener("click", async (event) => {
     return;
   }
 
-  const heroAdd = event.target.closest("#heroAddButton");
-  if (heroAdd) {
-    importButton.click();
+  const playButton = event.target.closest("[data-play]");
+  if (playButton) {
+    try {
+      await launchGameById(selectedGameId, shell.querySelectorAll("[data-play]"));
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
     return;
   }
 
-  const playButton = event.target.closest("[data-play]");
-  if (playButton) {
-    const game = selectedGameRecord();
-    const issue = game ? issueForSystem(game.system) : null;
-    if (issue) {
-      showToast(`${issue.label}: ${displayPath(issue.detail)}`);
-      return;
-    }
-
+  const browsePlayButton = event.target.closest("[data-browse-play]");
+  if (browsePlayButton) {
     try {
-      const result = await withLoading(shell.querySelectorAll("[data-play]"), {
-        buttonLabel: "Launching",
-        status: `Launching ${game?.title || "game"}`
-      }, () => window.gameRoom.launchGame(selectedGameId));
-      showToast(`Launching ${result.game.title}`);
+      await launchGameById(browsePlayButton.dataset.browsePlay, browsePlayButton);
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+    return;
+  }
+
+  const browseSelectButton = event.target.closest("[data-browse-select]");
+  if (browseSelectButton) {
+    const game = state.library.find((item) => item.id === browseSelectButton.dataset.browseSelect);
+    if (!game) return;
+    selectedGameId = game.id;
+    render();
+    return;
+  }
+
+  const favoriteButton = event.target.closest("[data-favorite-toggle]");
+  if (favoriteButton) {
+    try {
+      await toggleFavorite(favoriteButton.dataset.favoriteToggle, favoriteButton);
     } catch (error) {
       showToast(userErrorMessage(error));
     }
@@ -1906,6 +2401,12 @@ shell.addEventListener("click", async (event) => {
   const artworkButton = event.target.closest("[data-artwork-center]");
   if (artworkButton) {
     openArtworkCenter();
+    return;
+  }
+
+  const settingsButton = event.target.closest("[data-settings-open]");
+  if (settingsButton) {
+    openSettings();
     return;
   }
 
@@ -1986,9 +2487,260 @@ guideButton.addEventListener("click", openGuide);
 
 guideCloseButton.addEventListener("click", closeGuide);
 
+guideSetupButton.addEventListener("click", () => {
+  closeGuide();
+  openSetupWizard(0);
+});
+
 guideOverlay.addEventListener("click", async (event) => {
   if (event.target === guideOverlay) {
     closeGuide();
+    return;
+  }
+
+  const emulatorDownloadButton = event.target.closest("[data-download-emulator]");
+  if (emulatorDownloadButton) {
+    await openEmulatorDownload(emulatorDownloadButton.dataset.downloadEmulator, emulatorDownloadButton);
+  }
+});
+
+settingsCloseButton.addEventListener("click", closeSettings);
+
+settingsWizardButton.addEventListener("click", () => {
+  closeSettings();
+  openSetupWizard(0);
+});
+
+settingsScanButton.addEventListener("click", async () => {
+  try {
+    await scanEmulatorsFromSettings(settingsScanButton);
+  } catch (error) {
+    showToast(userErrorMessage(error));
+  }
+});
+
+settingsResetButton.addEventListener("click", async () => {
+  try {
+    await resetSetupFromSettings();
+  } catch (error) {
+    showToast(userErrorMessage(error));
+  }
+});
+
+setupWizardCloseButton.addEventListener("click", closeSetupWizard);
+
+setupWizardSkipButton.addEventListener("click", async () => {
+  try {
+    await completeSetupWizard(setupWizardSkipButton);
+  } catch (error) {
+    showToast(userErrorMessage(error));
+  }
+});
+
+setupWizardBackButton.addEventListener("click", () => {
+  setupWizardStep = Math.max(0, setupWizardStep - 1);
+  renderSetupWizard();
+});
+
+setupWizardNextButton.addEventListener("click", async () => {
+  if (setupWizardStep < setupWizardStepDefs.length - 1) {
+    setupWizardStep += 1;
+    renderSetupWizard();
+    return;
+  }
+
+  try {
+    await completeSetupWizard(setupWizardNextButton);
+  } catch (error) {
+    showToast(userErrorMessage(error));
+  }
+});
+
+setupWizardOverlay.addEventListener("click", async (event) => {
+  if (event.target === setupWizardOverlay) {
+    closeSetupWizard();
+    return;
+  }
+
+  const stepButton = event.target.closest("[data-wizard-step]");
+  if (stepButton) {
+    setupWizardStep = Number(stepButton.dataset.wizardStep) || 0;
+    renderSetupWizard();
+    return;
+  }
+
+  const chooseFolderButton = event.target.closest("[data-wizard-choose-folder]");
+  if (chooseFolderButton) {
+    try {
+      await chooseSettingsFolder(chooseFolderButton.dataset.wizardChooseFolder, chooseFolderButton);
+      renderSetupWizard();
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+    return;
+  }
+
+  const openFolderButton = event.target.closest("[data-wizard-open-folder]");
+  if (openFolderButton) {
+    const target = state.config[openFolderButton.dataset.wizardOpenFolder];
+    try {
+      await withLoading(openFolderButton, {
+        buttonLabel: "Opening",
+        status: "Opening folder"
+      }, () => window.gameRoom.revealFolder(target));
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+    return;
+  }
+
+  const scanEmulatorsButton = event.target.closest("[data-wizard-scan-emulators]");
+  if (scanEmulatorsButton) {
+    try {
+      await scanEmulatorsFromSettings(scanEmulatorsButton);
+      renderSetupWizard();
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+    return;
+  }
+
+  const chooseEmulatorButton = event.target.closest("[data-wizard-choose-emulator]");
+  if (chooseEmulatorButton) {
+    try {
+      await chooseEmulatorFromSettings(chooseEmulatorButton.dataset.wizardChooseEmulator, chooseEmulatorButton);
+      renderSetupWizard();
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+    return;
+  }
+
+  const emulatorDownloadButton = event.target.closest("[data-download-emulator]");
+  if (emulatorDownloadButton) {
+    await openEmulatorDownload(emulatorDownloadButton.dataset.downloadEmulator, emulatorDownloadButton);
+    return;
+  }
+
+  const openBiosButton = event.target.closest("[data-wizard-open-bios]");
+  if (openBiosButton) {
+    const system = state.systems[openBiosButton.dataset.wizardOpenBios];
+    const target = system ? childPath(state.config.biosRoot, system.folder) : state.config.biosRoot;
+    try {
+      await withLoading(openBiosButton, {
+        buttonLabel: "Opening",
+        status: "Opening BIOS folder"
+      }, () => window.gameRoom.revealFolder(target));
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+    return;
+  }
+
+  const importBiosWizardButton = event.target.closest("[data-wizard-import-bios]");
+  if (importBiosWizardButton) {
+    try {
+      await importBatoceraBios(importBiosWizardButton);
+      renderSetupWizard();
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+    return;
+  }
+
+  const selectSystemButton = event.target.closest("[data-wizard-select-system]");
+  if (selectSystemButton) {
+    selectSystem(selectSystemButton.dataset.wizardSelectSystem);
+    renderSetupWizard();
+    return;
+  }
+
+  const importGamesButton = event.target.closest("[data-wizard-import-games]");
+  if (importGamesButton) {
+    try {
+      const result = await withLoading(importGamesButton, {
+        buttonLabel: "Choosing",
+        status: "Opening game picker"
+      }, () => window.gameRoom.pickImportGames(currentImportSystem()));
+      await refreshAfterImport(result);
+      renderSetupWizard();
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+    return;
+  }
+
+  const scanLibraryButton = event.target.closest("[data-wizard-scan-library]");
+  if (scanLibraryButton) {
+    try {
+      state.library = await withLoading(scanLibraryButton, {
+        buttonLabel: "Scanning",
+        status: "Scanning library"
+      }, () => window.gameRoom.scanLibrary());
+      state = await window.gameRoom.getState();
+      if (!state.library.some((game) => game.id === selectedGameId)) {
+        selectedGameId = state.library[0]?.id ?? null;
+      }
+      render();
+      renderSetupWizard();
+      showToast(`Scanned ${state.library.length} game${state.library.length === 1 ? "" : "s"}`);
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+  }
+});
+
+settingsOverlay.addEventListener("click", async (event) => {
+  if (event.target === settingsOverlay) {
+    closeSettings();
+    return;
+  }
+
+  const chooseFolderButton = event.target.closest("[data-choose-folder]");
+  if (chooseFolderButton) {
+    try {
+      await chooseSettingsFolder(chooseFolderButton.dataset.chooseFolder, chooseFolderButton);
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+    return;
+  }
+
+  const openFolderButton = event.target.closest("[data-open-config-folder]");
+  if (openFolderButton) {
+    const target = state.config[openFolderButton.dataset.openConfigFolder];
+    try {
+      await withLoading(openFolderButton, {
+        buttonLabel: "Opening",
+        status: "Opening folder"
+      }, () => window.gameRoom.revealFolder(target));
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+    return;
+  }
+
+  const chooseEmulatorButton = event.target.closest("[data-choose-emulator]");
+  if (chooseEmulatorButton) {
+    try {
+      await chooseEmulatorFromSettings(chooseEmulatorButton.dataset.chooseEmulator, chooseEmulatorButton);
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
+    return;
+  }
+
+  const openEmulatorButton = event.target.closest("[data-open-emulator]");
+  if (openEmulatorButton) {
+    try {
+      const result = await withLoading(openEmulatorButton, {
+        buttonLabel: "Opening",
+        status: "Opening emulator"
+      }, () => window.gameRoom.openEmulator(openEmulatorButton.dataset.openEmulator));
+      showToast(`Opened ${result.emulator}`);
+    } catch (error) {
+      showToast(userErrorMessage(error));
+    }
     return;
   }
 
@@ -2133,6 +2885,24 @@ artworkOverlay.addEventListener("click", (event) => {
   if (event.target === artworkOverlay) closeArtworkCenter();
 });
 
+pageBrowseSearchInput.addEventListener("input", () => {
+  browseSearchTerm = pageBrowseSearchInput.value;
+  if (searchInput && searchInput.value !== browseSearchTerm) searchInput.value = browseSearchTerm;
+  const games = browseGames();
+  if (!games.some((game) => game.id === selectedGameId)) selectedGameId = games[0]?.id ?? null;
+  render();
+});
+
+pageBrowseTabs.addEventListener("click", (event) => {
+  const filterButton = event.target.closest("[data-browse-filter]");
+  if (!filterButton) return;
+  selectedSystem = "All";
+  browseFilter = filterButton.dataset.browseFilter;
+  const games = browseGames();
+  if (!games.some((game) => game.id === selectedGameId)) selectedGameId = games[0]?.id ?? null;
+  render();
+});
+
 document.addEventListener("click", playButtonUiSound, true);
 
 window.addEventListener("keydown", (event) => {
@@ -2146,6 +2916,8 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape") {
     closeGuide();
+    closeSetupWizard();
+    closeSettings();
     closeControllerCenter();
     closeArtworkCenter();
   }
@@ -2179,24 +2951,18 @@ window.addEventListener("gamepaddisconnected", async (event) => {
 
 importBiosButton.addEventListener("click", async () => {
   try {
-    const result = await withLoading(importBiosButton, {
-      buttonLabel: "Importing",
-      status: "Importing BIOS files"
-    }, () => window.gameRoom.importBatoceraBios());
-    state = result.state;
-    render();
-    const copied = Object.values(result.report).reduce((sum, item) => sum + item.copied, 0);
-    showToast(`Imported ${copied} BIOS file${copied === 1 ? "" : "s"}`);
+    await importBatoceraBios(importBiosButton);
   } catch (error) {
     showToast(userErrorMessage(error));
   }
 });
 
 searchInput.addEventListener("input", () => {
-  const games = visibleGames();
+  browseSearchTerm = searchInput.value;
+  if (pageBrowseSearchInput && pageBrowseSearchInput.value !== browseSearchTerm) pageBrowseSearchInput.value = browseSearchTerm;
+  const games = browseGames();
   if (!games.some((game) => game.id === selectedGameId)) selectedGameId = games[0]?.id ?? null;
-  renderLibrary();
-  renderSelected();
+  render();
 });
 
 dropZone.addEventListener("dragover", (event) => {
@@ -2229,5 +2995,9 @@ dropZone.addEventListener("drop", async (event) => {
     dropZone.classList.remove("busy");
   }
 });
+
+if (window.gameRoom.onGameEnded) {
+  window.gameRoom.onGameEnded(handleGameEnded);
+}
 
 boot();

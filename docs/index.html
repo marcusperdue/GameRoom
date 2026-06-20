@@ -106,6 +106,14 @@
         color: #06130c;
       }
 
+      .mac-download {
+        min-height: 64px;
+        padding: 0 28px;
+        border-radius: 14px;
+        font-size: 22px;
+        box-shadow: 0 18px 46px rgba(53, 232, 138, 0.22);
+      }
+
       .secondary,
       .card a {
         border: 1px solid var(--line);
@@ -156,6 +164,13 @@
         color: var(--muted);
       }
 
+      .download-note {
+        display: block;
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
       .note {
         display: grid;
         gap: 10px;
@@ -201,16 +216,19 @@
         <h1>Your games. One room.</h1>
         <p>GameRoom is a minimalist desktop launcher for GameCube, Wii, PS2, Xbox, Nintendo DS, PS1, and PSP libraries. It does not include games, BIOS files, or emulators.</p>
         <div class="actions">
-          <a class="primary" href="https://github.com/marcusperdue/GameRoom/releases/latest">Latest release</a>
+          <a class="primary mac-download" href="https://github.com/marcusperdue/GameRoom/releases/latest/download/GameRoom-0.1.0-mac-universal.dmg">Download for Mac</a>
+          <a class="secondary" href="#other-downloads">Other downloads</a>
           <a class="secondary" href="https://github.com/marcusperdue/GameRoom">Source code</a>
         </div>
+        <small class="download-note">Universal Mac DMG for Apple Silicon and Intel Macs.</small>
       </header>
 
-      <section class="grid" aria-label="Downloads">
+      <section class="grid" id="other-downloads" aria-label="Downloads">
         <article class="card">
-          <h2>macOS</h2>
+          <h2>Mac build links</h2>
           <p>Use Apple Silicon for M-series Macs. Use Intel for older Macs.</p>
           <div class="links">
+            <a href="https://github.com/marcusperdue/GameRoom/releases/latest/download/GameRoom-0.1.0-mac-universal.dmg">Universal DMG</a>
             <a href="https://github.com/marcusperdue/GameRoom/releases/latest/download/GameRoom-0.1.0-mac-arm64.dmg">Apple Silicon DMG</a>
             <a href="https://github.com/marcusperdue/GameRoom/releases/latest/download/GameRoom-0.1.0-mac-x64.dmg">Intel DMG</a>
             <a href="https://github.com/marcusperdue/GameRoom/releases/latest/download/GameRoom-0.1.0-mac-arm64.zip">Apple Silicon ZIP</a>

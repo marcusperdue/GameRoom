@@ -5,6 +5,20 @@ const fsp = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
+const artworkStore = require("./modules/artwork");
+const configStore = require("./modules/config");
+const controllerStore = require("./modules/controllers");
+const emulatorStore = require("./modules/emulators");
+const libraryStore = require("./modules/library");
+const saveStore = require("./modules/saves");
+const {
+  coverExtensions,
+  labelForSystem,
+  platformFolder,
+  portableFolderDefaults,
+  systems
+} = require("./modules/systems");
+
 const appDir = path.resolve(__dirname, "..");
 const rootDir = path.resolve(appDir, "..");
 const configDir = path.join(rootDir, "Config");
@@ -14,22 +28,9 @@ const emulatorProfilesPath = path.join(configDir, "emulators.json");
 const controllerProfilesPath = path.join(configDir, "controllers.json");
 const backupsDir = path.join(rootDir, "Backups", "Saves");
 const batoceraRoot = path.join(os.homedir(), "Library", "Mobile Documents", "com~apple~CloudDocs", "Batocera");
-const platformFolder = process.platform === "darwin" ? "macOS" : process.platform === "win32" ? "Windows" : "Linux";
 const appIconPngPath = path.join(__dirname, "assets", "icon.png");
 const appIconIcnsPath = path.join(__dirname, "assets", "icon.icns");
 const appIconIcoPath = path.join(__dirname, "assets", "icon.ico");
-const coverExtensions = ["png", "jpg", "jpeg", "webp", "gif", "avif"];
-const portableFolderDefaults = {
-  gameRoot: "Games",
-  saveRoot: "Saves",
-  biosRoot: "BIOS",
-  emulatorRoot: "Emulators",
-  controlsRoot: "Controls",
-  downloadsRoot: "Downloads",
-  coverRoot: "Covers",
-  metadataRoot: "Metadata",
-  backupRoot: path.join("Backups", "Saves")
-};
 
 app.setName("GameRoom");
 
@@ -40,100 +41,6 @@ process.on("uncaughtException", (error) => {
 process.on("unhandledRejection", (error) => {
   console.error("Unhandled GameRoom main-process rejection:", error);
 });
-
-const systems = {
-  GameCube: {
-    folder: "GameCube",
-    emulator: "Dolphin",
-    downloadUrl: "https://dolphin-emu.org/download/",
-    extensions: [".iso", ".rvz", ".gcm", ".gcz"],
-    command: {
-      darwin: "dolphin-emu",
-      linux: "dolphin-emu",
-      win32: "Dolphin.exe"
-    },
-    args: ["-b", "-e", "{game}"],
-    bios: "not_required"
-  },
-  Wii: {
-    folder: "Wii",
-    emulator: "Dolphin",
-    downloadUrl: "https://dolphin-emu.org/download/",
-    extensions: [".iso", ".rvz", ".wbfs", ".wad"],
-    command: {
-      darwin: "dolphin-emu",
-      linux: "dolphin-emu",
-      win32: "Dolphin.exe"
-    },
-    args: ["-b", "-e", "{game}"],
-    bios: "not_required"
-  },
-  PS2: {
-    folder: "PS2",
-    emulator: "PCSX2",
-    downloadUrl: "https://pcsx2.net/downloads/",
-    extensions: [".iso", ".chd", ".cso", ".bin", ".cue"],
-    command: {
-      darwin: "pcsx2",
-      linux: "pcsx2",
-      win32: "pcsx2-qt.exe"
-    },
-    args: ["-batch", "{game}"],
-    bios: "required"
-  },
-  Xbox: {
-    folder: "Xbox",
-    emulator: "xemu",
-    downloadUrl: "https://xemu.app/docs/download/",
-    extensions: [".iso", ".xiso", ".xbe"],
-    command: {
-      darwin: "xemu",
-      linux: "xemu",
-      win32: "xemu.exe"
-    },
-    args: ["-dvd_path", "{game}"],
-    bios: "required"
-  },
-  NintendoDS: {
-    folder: "NintendoDS",
-    emulator: "melonDS",
-    downloadUrl: "https://melonds.kuribo64.net/downloads.php",
-    extensions: [".nds"],
-    command: {
-      darwin: "melonDS",
-      linux: "melonDS",
-      win32: "melonDS.exe"
-    },
-    args: ["{game}"],
-    bios: "optional"
-  },
-  PS1: {
-    folder: "PS1",
-    emulator: "DuckStation",
-    downloadUrl: "https://duckstation.org/",
-    extensions: [".cue", ".chd", ".pbp", ".bin", ".iso"],
-    command: {
-      darwin: "duckstation-qt",
-      linux: "duckstation-qt",
-      win32: "duckstation-qt-x64-ReleaseLTCG.exe"
-    },
-    args: ["-batch", "{game}"],
-    bios: "required"
-  },
-  PSP: {
-    folder: "PSP",
-    emulator: "PPSSPP",
-    downloadUrl: "https://www.ppsspp.org/download/",
-    extensions: [".iso", ".cso", ".pbp"],
-    command: {
-      darwin: "PPSSPPSDL",
-      linux: "PPSSPPSDL",
-      win32: "PPSSPPWindows64.exe"
-    },
-    args: ["{game}"],
-    bios: "not_required"
-  }
-};
 
 function createWindow() {
   if (process.platform === "darwin" && app.dock) {
@@ -169,6 +76,27 @@ async function ensureDefaults() {
   const config = normalizeConfig(storedConfig);
   await writeJson(configPath, serializeConfig(config));
 
+  await ensureConfiguredFolders(config);
+  await ensureArtworkSidecars(config);
+
+  const storedProfiles = await readJson(emulatorProfilesPath, {});
+  const profiles = normalizeProfiles(
+    Object.keys(storedProfiles).length ? storedProfiles : createDefaultProfiles(config.emulatorRoot),
+    storedConfig.rootDir,
+    config.emulatorRoot
+  );
+  await writeJson(emulatorProfilesPath, serializeProfiles(profiles));
+
+  if (!fs.existsSync(libraryPath)) {
+    await writeJson(libraryPath, []);
+  }
+
+  if (!fs.existsSync(controllerProfilesPath)) {
+    await writeJson(controllerProfilesPath, createDefaultControllerState());
+  }
+}
+
+async function ensureConfiguredFolders(config) {
   const baseFolders = Object.keys(portableFolderDefaults).map((key) => config[key]);
   const systemFolders = Object.values(systems).flatMap((system) => [
     path.join(config.gameRoot, system.folder),
@@ -179,6 +107,7 @@ async function ensureDefaults() {
     path.join(config.saveRoot, emulator),
     path.join(config.controlsRoot, emulator)
   ]);
+
   await Promise.all([
     ...baseFolders,
     ...systemFolders,
@@ -192,171 +121,99 @@ async function ensureDefaults() {
     path.join(rootDir, "Cache", "temp"),
     path.join(rootDir, "Cache", "extracted")
   ].map((folder) => fsp.mkdir(folder, { recursive: true })));
+}
 
-  const storedProfiles = await readJson(emulatorProfilesPath, {});
-  const profiles = normalizeProfiles(Object.keys(storedProfiles).length ? storedProfiles : createDefaultProfiles(), storedConfig.rootDir);
-  await writeJson(emulatorProfilesPath, serializeProfiles(profiles));
+async function ensureArtworkSidecars(config) {
+  const artworkFolder = path.join(config.metadataRoot, "artwork");
+  if (!fs.existsSync(artworkFolder)) return;
 
-  if (!fs.existsSync(libraryPath)) {
-    await writeJson(libraryPath, []);
+  let entries = [];
+  try {
+    entries = await fsp.readdir(artworkFolder, { withFileTypes: true });
+  } catch {
+    return;
   }
 
-  if (!fs.existsSync(controllerProfilesPath)) {
-    await writeJson(controllerProfilesPath, createDefaultControllerState());
-  }
+  await Promise.all(entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .map(async (entry) => {
+      const record = await readJson(path.join(artworkFolder, entry.name), null);
+      if (!record?.coverPath) return;
+
+      const coverPath = resolveConfiguredPath(record.coverPath, rootDir, "");
+      if (!coverPath || !fs.existsSync(coverPath)) return;
+
+      const coverFolder = path.dirname(coverPath);
+      const coverStem = path.basename(coverPath, path.extname(coverPath));
+      const sourceUrl = record?.source?.imageUrl || record?.source?.originalUrl || "";
+      const sidecarRecord = {
+        ...record,
+        coverPath: toPortablePath(coverPath),
+        localFile: path.basename(coverPath)
+      };
+
+      await writeJson(path.join(coverFolder, `${coverStem}.source.json`), sidecarRecord);
+      if (sourceUrl) {
+        await fsp.writeFile(path.join(coverFolder, `${coverStem}.source.url`), `${sourceUrl}\n`);
+      }
+    }));
 }
 
 function createDefaultConfig() {
-  return {
-    rootMode: "portable",
-    rootDir: ".",
-    ...portableFolderDefaults,
-    lastSystem: "GameCube"
-  };
+  return configStore.createDefaultConfig(portableFolderDefaults);
 }
 
 function normalizeConfig(rawConfig = {}) {
-  const sourceRoot = rawConfig.rootDir && rawConfig.rootDir !== "." ? rawConfig.rootDir : rootDir;
-  const config = {
-    ...createDefaultConfig(),
-    ...rawConfig,
-    rootDir
-  };
-
-  for (const [key, defaultValue] of Object.entries(portableFolderDefaults)) {
-    config[key] = resolveConfiguredPath(rawConfig[key] ?? defaultValue, sourceRoot, defaultValue);
-  }
-
-  return config;
+  return configStore.normalizeConfig(rawConfig, { rootDir, portableFolderDefaults });
 }
 
 function serializeConfig(config) {
-  const portableConfig = {
-    rootMode: "portable",
-    rootDir: ".",
-    lastSystem: config.lastSystem || "GameCube"
-  };
-
-  for (const key of Object.keys(portableFolderDefaults)) {
-    portableConfig[key] = toPortablePath(config[key]);
-  }
-
-  return portableConfig;
+  return configStore.serializeConfig(config, { rootDir, portableFolderDefaults });
 }
 
 function resolveConfiguredPath(value, sourceRoot = rootDir, fallback = "") {
-  if (!value) return path.join(rootDir, fallback);
-  if (!path.isAbsolute(value)) return path.resolve(rootDir, value);
-
-  const relativeToSource = sourceRoot && path.isAbsolute(sourceRoot) ? path.relative(sourceRoot, value) : "";
-  if (relativeToSource && isInsideRootRelative(relativeToSource)) {
-    return path.resolve(rootDir, relativeToSource);
-  }
-
-  return value;
+  return configStore.resolveConfiguredPath(value, { rootDir, sourceRoot, fallback });
 }
 
 function toPortablePath(target) {
-  if (!target) return "";
-  const relative = path.relative(rootDir, target);
-  return isInsideRootRelative(relative) ? normalizeSlashes(relative || ".") : target;
+  return configStore.toPortablePath(target, rootDir);
 }
 
 function isInsideRootRelative(relativePath) {
-  return Boolean(relativePath) && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
+  return configStore.isInsideRootRelative(relativePath);
 }
 
 function normalizeSlashes(value) {
-  return value.split(path.sep).join("/");
+  return configStore.normalizeSlashes(value);
 }
 
-function createDefaultProfiles() {
-  const profiles = {};
-  for (const [systemName, system] of Object.entries(systems)) {
-    profiles[systemName] = {
-      emulator: system.emulator,
-      command: detectCommand(system.command),
-      args: system.args,
-      bios: system.bios,
-      enabled: true
-    };
-  }
-  return profiles;
+function createDefaultProfiles(emulatorRoot = path.join(rootDir, "Emulators")) {
+  return emulatorStore.createDefaultProfiles({ systems, emulatorRoot, rootDir, platformFolder });
 }
 
-function normalizeProfiles(rawProfiles = {}, sourceRoot = rootDir) {
-  const defaults = createDefaultProfiles();
-  const profiles = {};
-
-  for (const [systemName, defaultsForSystem] of Object.entries(defaults)) {
-    const rawProfile = rawProfiles[systemName] || {};
-    const profile = { ...defaultsForSystem, ...rawProfile };
-    const resolvedCommand = resolveCommandPath(profile.command, sourceRoot);
-    const defaultCommand = defaultsForSystem.command;
-    profile.command = commandExists(resolvedCommand)
-      ? resolvedCommand
-      : commandLooksLikePath(profile.command)
-        ? resolvedCommand
-        : defaultCommand;
-    profiles[systemName] = profile;
-  }
-
-  return profiles;
+function normalizeProfiles(rawProfiles = {}, sourceRoot = rootDir, emulatorRoot = path.join(rootDir, "Emulators")) {
+  return emulatorStore.normalizeProfiles({
+    ...rawProfiles
+  }, {
+    systems,
+    sourceRoot,
+    rootDir,
+    emulatorRoot,
+    platformFolder,
+    resolveConfiguredPath
+  });
 }
 
 function serializeProfiles(profiles) {
-  return Object.fromEntries(
-    Object.entries(profiles).map(([systemName, profile]) => [
-      systemName,
-      {
-        ...profile,
-        command: commandLooksLikePath(profile.command) ? toPortablePath(profile.command) : profile.command
-      }
-    ])
-  );
+  return emulatorStore.serializeProfiles(profiles, { toPortablePath });
 }
 
 function createDefaultControllerState() {
-  return {
-    defaultController: "",
-    lastSeen: [],
-    profiles: {},
-    universalProfile: null,
-    emulatorSetup: [],
-    updatedAt: null
-  };
+  return controllerStore.createDefaultControllerState();
 }
 
 function normalizeControllerState(rawState = {}) {
-  const defaults = createDefaultControllerState();
-  const profiles = rawState.profiles && typeof rawState.profiles === "object" ? rawState.profiles : {};
-  const lastSeen = Array.isArray(rawState.lastSeen) ? rawState.lastSeen : [];
-
-  return {
-    ...defaults,
-    ...rawState,
-    defaultController: typeof rawState.defaultController === "string" ? rawState.defaultController : "",
-    lastSeen: lastSeen
-      .filter((controller) => controller && typeof controller.id === "string")
-      .slice(0, 12)
-      .map((controller) => ({
-        id: controller.id,
-        name: typeof controller.name === "string" ? controller.name : "",
-        index: Number.isInteger(controller.index) ? controller.index : 0,
-        mapping: typeof controller.mapping === "string" ? controller.mapping : "",
-        buttons: Number.isInteger(controller.buttons) ? controller.buttons : 0,
-        axes: Number.isInteger(controller.axes) ? controller.axes : 0,
-        source: typeof controller.source === "string" ? controller.source : "",
-        transport: typeof controller.transport === "string" ? controller.transport : "",
-        live: Boolean(controller.live),
-        connectedAt: controller.connectedAt || null,
-        updatedAt: controller.updatedAt || null
-      })),
-    profiles,
-    universalProfile: rawState.universalProfile && typeof rawState.universalProfile === "object" ? rawState.universalProfile : null,
-    emulatorSetup: Array.isArray(rawState.emulatorSetup) ? rawState.emulatorSetup : [],
-    updatedAt: rawState.updatedAt || null
-  };
+  return controllerStore.normalizeControllerState(rawState);
 }
 
 async function getControllerState() {
@@ -666,7 +523,7 @@ async function openBluetoothSettings() {
 async function applyUniversalControllerSetup(controller = {}) {
   const rawConfig = await readJson(configPath, createDefaultConfig());
   const config = normalizeConfig(rawConfig);
-  const profiles = normalizeProfiles(await readJson(emulatorProfilesPath, {}), rawConfig.rootDir);
+  const profiles = normalizeProfiles(await readJson(emulatorProfilesPath, {}), rawConfig.rootDir, config.emulatorRoot);
   const hasControllerIdentity = Boolean(
     (typeof controller.id === "string" && controller.id.trim()) ||
     (typeof controller.name === "string" && controller.name.trim())
@@ -1377,52 +1234,27 @@ async function backupExistingConfig(filePath, emulatorName) {
 }
 
 function resolveCommandPath(command, sourceRoot = rootDir) {
-  if (!command || !commandLooksLikePath(command)) return command || "";
-  return resolveConfiguredPath(command, sourceRoot, command);
+  return emulatorStore.resolveCommandPath(command, { rootDir, sourceRoot, resolveConfiguredPath });
 }
 
 function commandLooksLikePath(command) {
-  return command.includes("/") || command.includes("\\") || path.isAbsolute(command);
+  return emulatorStore.commandLooksLikePath(command);
 }
 
-function detectCommand(commands) {
-  const platform = process.platform;
-  const portable = findPortableEmulator(commands[platform]);
-  if (portable) return portable;
-
-  if (platform === "darwin") {
-    const macApps = {
-      "dolphin-emu": "/Applications/Dolphin.app/Contents/MacOS/Dolphin",
-      pcsx2: "/Applications/PCSX2.app/Contents/MacOS/pcsx2",
-      xemu: "/Applications/xemu.app/Contents/MacOS/xemu",
-      melonDS: "/Applications/melonDS.app/Contents/MacOS/melonDS",
-      "duckstation-qt": "/Applications/DuckStation.app/Contents/MacOS/DuckStation",
-      PPSSPPSDL: "/Applications/PPSSPP.app/Contents/MacOS/PPSSPPSDL"
-    };
-    const candidate = macApps[commands[platform]];
-    if (candidate && fs.existsSync(candidate)) return candidate;
-  }
-
-  return commands[platform] || "";
+function detectCommand(commands, emulatorRoot = path.join(rootDir, "Emulators")) {
+  return emulatorStore.detectCommand(commands, { emulatorRoot, rootDir, platformFolder });
 }
 
-function findPortableEmulator(binaryName) {
-  if (!binaryName) return "";
-  const emulatorDir = path.join(rootDir, "Emulators", platformFolder);
-  if (!fs.existsSync(emulatorDir)) return "";
-
-  const matches = walkSync(emulatorDir).filter((item) => path.basename(item).toLowerCase() === binaryName.toLowerCase());
-  return matches[0] || "";
+function findPortableEmulator(binaryName, emulatorRoot = path.join(rootDir, "Emulators")) {
+  return emulatorStore.findPortableEmulator(binaryName, { emulatorRoot, platformFolder });
 }
 
-function walkSync(folder) {
-  const found = [];
-  for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
-    const fullPath = path.join(folder, entry.name);
-    if (entry.isDirectory()) found.push(...walkSync(fullPath));
-    if (entry.isFile()) found.push(fullPath);
-  }
-  return found;
+function findInstalledEmulator(binaryName) {
+  return emulatorStore.findInstalledEmulator(binaryName);
+}
+
+function walkSync(folder, depth = 0) {
+  return emulatorStore.walkSync(folder, depth);
 }
 
 async function readJson(filePath, fallback) {
@@ -1440,92 +1272,9 @@ async function writeJson(filePath, value) {
 
 async function scanLibrary() {
   const config = normalizeConfig(await readJson(configPath, createDefaultConfig()));
-  const library = [];
-
-  for (const [systemName, system] of Object.entries(systems)) {
-    const folder = path.join(config.gameRoot, system.folder);
-    const files = fs.existsSync(folder) ? await walk(folder) : [];
-    for (const filePath of files) {
-      const ext = path.extname(filePath).toLowerCase();
-      if (!system.extensions.includes(ext)) continue;
-      const stats = await fsp.stat(filePath);
-      const portableGamePath = toPortablePath(filePath);
-      const coverPath = findCoverPath(config, systemName, cleanTitle(path.basename(filePath, ext)), stableId(portableGamePath));
-      const coverStats = coverPath ? await safeStat(coverPath) : null;
-      library.push({
-        id: stableId(portableGamePath),
-        title: cleanTitle(path.basename(filePath, ext)),
-        system: systemName,
-        emulator: system.emulator,
-        path: portableGamePath,
-        coverPath: toPortablePath(coverPath),
-        coverUpdatedAt: coverStats?.mtime?.toISOString() || "",
-        format: ext.slice(1).toUpperCase(),
-        size: formatBytes(stats.size),
-        modified: stats.mtime.toISOString()
-      });
-    }
-  }
-
-  library.sort((a, b) => `${a.system}:${a.title}`.localeCompare(`${b.system}:${b.title}`));
+  const library = await libraryStore.scanLibraryEntries({ config, systems, rootDir, toPortablePath });
   await writeJson(libraryPath, library);
   return library;
-}
-
-function findCoverPath(config, systemName, title, id) {
-  const coverFolder = path.join(config.coverRoot, systems[systemName].folder);
-  if (!fs.existsSync(coverFolder)) return "";
-  const safeTitle = sanitizeFileName(title);
-  const baseNames = [...new Set([id, title, safeTitle].filter(Boolean))];
-  const candidates = baseNames.flatMap((baseName) => coverExtensions.map((extension) => path.join(coverFolder, `${baseName}.${extension}`)));
-  return candidates.find((candidate) => fs.existsSync(candidate)) || "";
-}
-
-async function safeStat(filePath) {
-  try {
-    return await fsp.stat(filePath);
-  } catch {
-    return null;
-  }
-}
-
-async function walk(folder, depth = 0) {
-  if (depth > 8) return [];
-  const entries = await fsp.readdir(folder, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const fullPath = path.join(folder, entry.name);
-    if (entry.isDirectory()) {
-      if (!entry.name.startsWith(".")) files.push(...(await walk(fullPath, depth + 1)));
-    } else if (entry.isFile()) {
-      files.push(fullPath);
-    }
-  }
-  return files;
-}
-
-function stableId(text) {
-  let hash = 0;
-  for (let i = 0; i < text.length; i += 1) {
-    hash = (hash << 5) - hash + text.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(36);
-}
-
-function cleanTitle(title) {
-  return title.replace(/[._-]+/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function formatBytes(bytes) {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value.toFixed(unit === 0 ? 0 : 2)} ${units[unit]}`;
 }
 
 async function getState() {
@@ -1535,7 +1284,7 @@ async function getState() {
     readJson(libraryPath, [])
   ]);
   const config = normalizeConfig(rawConfig);
-  const profiles = normalizeProfiles(rawProfiles, rawConfig.rootDir);
+  const profiles = normalizeProfiles(rawProfiles, rawConfig.rootDir, config.emulatorRoot);
 
   return {
     config,
@@ -1553,16 +1302,11 @@ async function getState() {
 }
 
 function archiveSearchTerms(game) {
-  const system = systems[game.system] || {};
-  return [
-    `"${escapeArchiveQuery(game.title)}"`,
-    "AND",
-    `(${escapeArchiveQuery(game.system)} OR ${escapeArchiveQuery(system.emulator || "")} OR cover OR box OR artwork OR manual)`
-  ].join(" ");
+  return artworkStore.archiveSearchTerms(game, systems[game.system] || {});
 }
 
 function escapeArchiveQuery(value) {
-  return String(value || "").replace(/["\\]/g, " ").replace(/\s+/g, " ").trim();
+  return artworkStore.escapeArchiveQuery(value);
 }
 
 async function searchArchiveArtwork(gameId) {
@@ -1620,12 +1364,12 @@ async function saveArtworkFromUrl(gameId, imageUrl, source = {}) {
   const coverPath = path.join(coverFolder, `${game.id}.${extension}`);
   await fsp.writeFile(coverPath, download.bytes);
 
-  const metadataPath = path.join(config.metadataRoot, "artwork", `${game.id}.json`);
-  await writeJson(metadataPath, {
+  const artworkRecord = {
     gameId: game.id,
     title: game.title,
     system: game.system,
     coverPath: toPortablePath(coverPath),
+    localFile: path.basename(coverPath),
     source: {
       provider: source.provider || "Manual URL",
       sourceId: source.sourceId || "",
@@ -1635,7 +1379,12 @@ async function saveArtworkFromUrl(gameId, imageUrl, source = {}) {
       originalUrl: imageUrl
     },
     savedAt: new Date().toISOString()
-  });
+  };
+
+  const metadataPath = path.join(config.metadataRoot, "artwork", `${game.id}.json`);
+  await writeJson(metadataPath, artworkRecord);
+  await writeJson(path.join(coverFolder, `${game.id}.source.json`), artworkRecord);
+  await fsp.writeFile(path.join(coverFolder, `${game.id}.source.url`), `${download.finalUrl}\n`);
 
   const updatedLibrary = await scanLibrary();
   return {
@@ -1716,49 +1465,15 @@ async function downloadArtworkImage(imageUrl, depth = 0) {
 }
 
 function extractWrappedImageUrl(parsedUrl) {
-  const params = ["imgurl", "mediaurl", "image_url", "image", "url", "u"];
-  for (const param of params) {
-    const value = parsedUrl.searchParams.get(param);
-    if (!value) continue;
-    try {
-      const nested = new URL(value);
-      if (["http:", "https:"].includes(nested.protocol)) return nested.toString();
-    } catch {
-      // Keep checking other wrapper params.
-    }
-  }
-  return "";
+  return artworkStore.extractWrappedImageUrl(parsedUrl);
 }
 
 function extractImageUrlFromHtml(html, baseUrl) {
-  const patterns = [
-    /<meta\s+[^>]*(?:property|name)=["']og:image(?::secure_url)?["'][^>]*content=["']([^"']+)["'][^>]*>/i,
-    /<meta\s+[^>]*content=["']([^"']+)["'][^>]*(?:property|name)=["']og:image(?::secure_url)?["'][^>]*>/i,
-    /<meta\s+[^>]*(?:property|name)=["']twitter:image(?::src)?["'][^>]*content=["']([^"']+)["'][^>]*>/i,
-    /<link\s+[^>]*rel=["']image_src["'][^>]*href=["']([^"']+)["'][^>]*>/i
-  ];
-
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (!match?.[1]) continue;
-    try {
-      const imageUrl = new URL(decodeHtmlEntities(match[1]), baseUrl);
-      if (["http:", "https:"].includes(imageUrl.protocol)) return imageUrl.toString();
-    } catch {
-      // Try the next metadata format.
-    }
-  }
-
-  return "";
+  return artworkStore.extractImageUrlFromHtml(html, baseUrl);
 }
 
 function decodeHtmlEntities(value) {
-  return String(value)
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#039;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+  return artworkStore.decodeHtmlEntities(value);
 }
 
 async function removeExistingCoverVersions(coverFolder, gameId) {
@@ -1780,46 +1495,20 @@ async function openGoogleImagesForGame(gameId) {
   return true;
 }
 
-function labelForSystem(systemName) {
-  const labels = {
-    NintendoDS: "Nintendo DS",
-    PS1: "PlayStation 1",
-    PS2: "PlayStation 2",
-    PSP: "PSP"
-  };
-  return labels[systemName] || systemName;
-}
-
 function plainText(value) {
-  return String(value).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 220);
+  return artworkStore.plainText(value);
 }
 
 function extensionForContentType(contentType) {
-  const type = contentType.toLowerCase().split(";")[0].trim();
-  const map = {
-    "image/jpeg": "jpg",
-    "image/jpg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/gif": "gif",
-    "image/avif": "avif"
-  };
-  return map[type] || "";
+  return artworkStore.extensionForContentType(contentType);
 }
 
 function extensionForUrl(parsedUrl) {
-  const ext = path.extname(parsedUrl.pathname).toLowerCase().replace(".", "");
-  return coverExtensions.includes(ext) ? (ext === "jpeg" ? "jpg" : ext) : "";
+  return artworkStore.extensionForUrl(parsedUrl, coverExtensions);
 }
 
 function extensionForBytes(bytes) {
-  if (!bytes || bytes.length < 12) return "";
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpg";
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "png";
-  if (bytes.slice(0, 6).toString("ascii") === "GIF87a" || bytes.slice(0, 6).toString("ascii") === "GIF89a") return "gif";
-  if (bytes.slice(8, 12).toString("ascii") === "WEBP") return "webp";
-  if (bytes.slice(4, 12).toString("ascii").includes("ftypavif")) return "avif";
-  return "";
+  return artworkStore.extensionForBytes(bytes);
 }
 
 async function healthCheck(config, profiles) {
@@ -1862,58 +1551,19 @@ function checkPath(label, target) {
 }
 
 function commandExists(command) {
-  command = resolveCommandPath(command);
-  if (commandLooksLikePath(command)) return isExecutableFile(command);
-  return Boolean(findCommandOnPath(command));
+  return emulatorStore.commandExists(command, { rootDir });
 }
 
 function findCommandOnPath(command) {
-  if (!command) return "";
-  const lookup = process.platform === "win32" ? "where" : "which";
-  const result = spawnSync(lookup, [command], { encoding: "utf8" });
-  if (result.status !== 0) return "";
-  return result.stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean) || "";
+  return emulatorStore.findCommandOnPath(command);
 }
 
 function isExecutableFile(target) {
-  try {
-    const stats = fs.statSync(target);
-    if (!stats.isFile()) return false;
-    if (process.platform === "win32") return true;
-    fs.accessSync(target, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
+  return emulatorStore.isExecutableFile(target);
 }
 
 function prepareLaunchCommand(command, emulatorName) {
-  const resolved = resolveCommandPath(command);
-  if (!resolved) throw new Error(`${emulatorName} is not configured.`);
-
-  if (!commandLooksLikePath(resolved)) {
-    const pathCommand = findCommandOnPath(resolved);
-    if (!pathCommand) throw new Error(`${emulatorName} is not installed or not on PATH.`);
-    return pathCommand;
-  }
-
-  if (!fs.existsSync(resolved)) {
-    throw new Error(`${emulatorName} executable is missing: ${toPortablePath(resolved)}`);
-  }
-
-  if (!isExecutableFile(resolved)) {
-    try {
-      if (process.platform !== "win32") fs.chmodSync(resolved, 0o755);
-    } catch {
-      // The explicit error below gives the user the path that needs attention.
-    }
-  }
-
-  if (!isExecutableFile(resolved)) {
-    throw new Error(`${emulatorName} is not executable: ${toPortablePath(resolved)}`);
-  }
-
-  return resolved;
+  return emulatorStore.prepareLaunchCommand(command, emulatorName, { rootDir, toPortablePath });
 }
 
 function hasUserFiles(folder) {
@@ -1956,7 +1606,7 @@ async function launchGame(gameId) {
   const library = await readJson(libraryPath, []);
   const rawConfig = await readJson(configPath, createDefaultConfig());
   const config = normalizeConfig(rawConfig);
-  const profiles = normalizeProfiles(await readJson(emulatorProfilesPath, {}), rawConfig.rootDir);
+  const profiles = normalizeProfiles(await readJson(emulatorProfilesPath, {}), rawConfig.rootDir, config.emulatorRoot);
   const game = library.find((item) => item.id === gameId);
   if (!game) throw new Error("Game not found. Scan the library first.");
 
@@ -1977,6 +1627,7 @@ async function launchGame(gameId) {
 
   const command = prepareLaunchCommand(profile.command, profile.emulator);
   const args = profile.args.map((arg) => arg.replace("{game}", gamePath));
+  let launchId = "";
   try {
     const child = spawn(command, args, {
       cwd: rootDir,
@@ -1988,17 +1639,36 @@ async function launchGame(gameId) {
       child.once("spawn", resolve);
       child.once("error", (error) => reject(new Error(`Could not launch ${profile.emulator}: ${error.message}`)));
     });
+    launchId = `${game.id}:${child.pid || "process"}:${Date.now()}`;
+    child.once("close", (exitCode, signal) => {
+      notifyGameEnded({
+        gameId: game.id,
+        launchId,
+        title: game.title,
+        system: game.system,
+        emulator: profile.emulator,
+        exitCode,
+        signal
+      });
+    });
     child.unref();
   } catch (error) {
     throw new Error(error.message || `Could not launch ${profile.emulator}.`);
   }
 
-  return { game: launchGameInfo, command, args };
+  return { game: launchGameInfo, command, args, launchId };
+}
+
+function notifyGameEnded(payload) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send("game:ended", payload);
+  }
 }
 
 async function openEmulator(systemName) {
   const rawConfig = await readJson(configPath, createDefaultConfig());
-  const profiles = normalizeProfiles(await readJson(emulatorProfilesPath, {}), rawConfig.rootDir);
+  const config = normalizeConfig(rawConfig);
+  const profiles = normalizeProfiles(await readJson(emulatorProfilesPath, {}), rawConfig.rootDir, config.emulatorRoot);
   const profile = profiles[systemName];
   if (!profile) throw new Error(`Unknown system: ${systemName}`);
 
@@ -2028,26 +1698,115 @@ async function openEmulatorDownload(systemName) {
   };
 }
 
-async function snapshotSaves(reason = "manual", game = null) {
-  const config = normalizeConfig(await readJson(configPath, createDefaultConfig()));
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const folderName = game ? `${stamp}-${game.system}-${game.title}` : `${stamp}-${reason}`;
-  const target = path.join(config.backupRoot, sanitizeFileName(folderName));
-  await fsp.mkdir(target, { recursive: true });
-
-  const saveRoot = config.saveRoot;
-  if (fs.existsSync(saveRoot)) {
-    await fsp.cp(saveRoot, path.join(target, "Saves"), { recursive: true, force: true });
-  }
-
-  await writeJson(path.join(target, "snapshot.json"), {
-    reason,
-    game,
-    createdAt: new Date().toISOString(),
-    machine: os.hostname()
+async function chooseEmulator(systemName) {
+  if (!systems[systemName]) throw new Error(`Unknown system: ${systemName}`);
+  const rawConfig = await readJson(configPath, createDefaultConfig());
+  const config = normalizeConfig(rawConfig);
+  const profiles = normalizeProfiles(await readJson(emulatorProfilesPath, {}), rawConfig.rootDir, config.emulatorRoot);
+  const profile = profiles[systemName];
+  const defaultPath = emulatorPickerDefaultPath(config, profile);
+  const properties = process.platform === "darwin" ? ["openFile", "openDirectory"] : ["openFile"];
+  const result = await dialog.showOpenDialog({
+    defaultPath,
+    properties,
+    filters: process.platform === "win32" ? [{ name: "Applications", extensions: ["exe"] }] : undefined
   });
 
-  return target;
+  if (result.canceled || !result.filePaths[0]) {
+    return { canceled: true, state: await getState() };
+  }
+
+  const command = normalizeChosenEmulatorPath(result.filePaths[0], systemName);
+  if (!commandExists(command)) {
+    throw new Error(`${profile.emulator} executable is missing or cannot be opened: ${toPortablePath(command)}`);
+  }
+
+  const nextProfiles = { ...profiles };
+  for (const [candidateSystem, candidateProfile] of Object.entries(nextProfiles)) {
+    if (candidateProfile.emulator === profile.emulator) {
+      nextProfiles[candidateSystem] = {
+        ...candidateProfile,
+        command
+      };
+    }
+  }
+
+  await writeJson(emulatorProfilesPath, serializeProfiles(nextProfiles));
+  return {
+    canceled: false,
+    system: systemName,
+    emulator: profile.emulator,
+    command: toPortablePath(command),
+    state: await getState()
+  };
+}
+
+function emulatorPickerDefaultPath(config, profile = {}) {
+  return emulatorStore.emulatorPickerDefaultPath(config, profile, { rootDir, resolveCommandPathForApp: resolveCommandPath });
+}
+
+function normalizeChosenEmulatorPath(selectedPath, systemName) {
+  return emulatorStore.normalizeChosenEmulatorPath(selectedPath, systemName, { systems });
+}
+
+function macAppExecutablePath(appPath) {
+  return emulatorStore.macAppExecutablePath(appPath);
+}
+
+function executableInFolder(folder, systemName) {
+  return emulatorStore.executableInFolder(folder, systemName, { systems });
+}
+
+function isCandidateExecutablePath(filePath) {
+  return emulatorStore.isCandidateExecutablePath(filePath);
+}
+
+async function scanEmulators() {
+  const rawConfig = await readJson(configPath, createDefaultConfig());
+  const config = normalizeConfig(rawConfig);
+  const currentProfiles = normalizeProfiles(await readJson(emulatorProfilesPath, {}), rawConfig.rootDir, config.emulatorRoot);
+  const detectedProfiles = createDefaultProfiles(config.emulatorRoot);
+  const nextProfiles = {};
+  let found = 0;
+  let updated = 0;
+
+  for (const [systemName, profile] of Object.entries(currentProfiles)) {
+    const detected = detectedProfiles[systemName] || {};
+    const currentOk = commandExists(profile.command);
+    const detectedOk = commandExists(detected.command);
+    const nextProfile = { ...profile };
+    if (!currentOk && detectedOk) {
+      nextProfile.command = detected.command;
+      updated += 1;
+    }
+    if (commandExists(nextProfile.command)) found += 1;
+    nextProfiles[systemName] = nextProfile;
+  }
+
+  await writeJson(emulatorProfilesPath, serializeProfiles(nextProfiles));
+  return {
+    found,
+    updated,
+    state: await getState()
+  };
+}
+
+async function resetSetup() {
+  const current = normalizeConfig(await readJson(configPath, createDefaultConfig()));
+  const config = normalizeConfig({
+    ...createDefaultConfig(),
+    favoriteGameIds: current.favoriteGameIds
+  });
+  await writeJson(configPath, serializeConfig(config));
+  await ensureConfiguredFolders(config);
+  await writeJson(emulatorProfilesPath, serializeProfiles(createDefaultProfiles(config.emulatorRoot)));
+  await scanLibrary();
+  return { state: await getState() };
+}
+
+async function snapshotSaves(reason = "manual", game = null) {
+  const config = normalizeConfig(await readJson(configPath, createDefaultConfig()));
+  return saveStore.snapshotSaves({ config, game, reason, writeJson });
 }
 
 async function importBatoceraBios() {
@@ -2085,9 +1844,9 @@ async function importBatoceraBios() {
     const files = [];
     for (const folder of spec.folders) {
       const source = path.join(batoceraRoot, folder);
-      if (fs.existsSync(source)) files.push(...(await walk(source)));
+      if (fs.existsSync(source)) files.push(...(await libraryStore.walk(source)));
     }
-    files.push(...(await walk(batoceraRoot, 0, 2)));
+    files.push(...(await libraryStore.walk(batoceraRoot, 0, 2)));
 
     const matches = [...new Set(files.filter((filePath) => spec.patterns.some((pattern) => pattern.test(path.basename(filePath)))))];
     let copied = 0;
@@ -2106,66 +1865,12 @@ async function importBatoceraBios() {
 }
 
 function sanitizeFileName(name) {
-  return name.replace(/[<>:"/\\|?*]+/g, "-").slice(0, 160);
-}
-
-function matchingSystemsForFile(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  return Object.entries(systems)
-    .filter(([, system]) => system.extensions.includes(ext))
-    .map(([systemName]) => systemName);
-}
-
-function destinationForGame(config, filePath, requestedSystem = "") {
-  const matches = matchingSystemsForFile(filePath);
-  const systemName = requestedSystem || (matches.length === 1 ? matches[0] : "");
-  if (!systemName || !systems[systemName]) {
-    return { error: `Choose a console for ${path.basename(filePath)}`, matches };
-  }
-
-  return {
-    systemName,
-    targetFolder: path.join(config.gameRoot, systems[systemName].folder),
-    targetPath: path.join(config.gameRoot, systems[systemName].folder, path.basename(filePath))
-  };
+  return saveStore.sanitizeFileName(name);
 }
 
 async function importGameFiles(files, requestedSystem = "") {
   const config = normalizeConfig(await readJson(configPath, createDefaultConfig()));
-  const imported = [];
-  const skipped = [];
-
-  for (const filePath of files) {
-    if (!filePath || !fs.existsSync(filePath)) {
-      skipped.push({ filePath, reason: "File does not exist" });
-      continue;
-    }
-
-    const fileStat = await fsp.stat(filePath);
-    if (!fileStat.isFile()) {
-      skipped.push({ filePath, reason: "Only files can be imported" });
-      continue;
-    }
-
-    const destination = destinationForGame(config, filePath, requestedSystem);
-    if (destination.error) {
-      skipped.push({ filePath, reason: destination.error, matches: destination.matches });
-      continue;
-    }
-
-    await fsp.mkdir(destination.targetFolder, { recursive: true });
-    if (path.resolve(filePath) !== path.resolve(destination.targetPath)) {
-      await fsp.copyFile(filePath, destination.targetPath);
-    }
-    imported.push({
-      source: filePath,
-      target: destination.targetPath,
-      system: destination.systemName
-    });
-  }
-
-  const library = await scanLibrary();
-  return { imported, skipped, library };
+  return libraryStore.importGameFiles({ files, requestedSystem, config, systems, scanLibrary });
 }
 
 ipcMain.handle("state:get", getState);
@@ -2181,6 +1886,9 @@ ipcMain.handle("library:scan", scanLibrary);
 ipcMain.handle("game:launch", (_event, gameId) => launchGame(gameId));
 ipcMain.handle("emulator:open", (_event, systemName) => openEmulator(systemName));
 ipcMain.handle("emulator:open-download", (_event, systemName) => openEmulatorDownload(systemName));
+ipcMain.handle("emulator:choose", (_event, systemName) => chooseEmulator(systemName));
+ipcMain.handle("emulators:scan", scanEmulators);
+ipcMain.handle("setup:reset", resetSetup);
 ipcMain.handle("saves:snapshot", () => snapshotSaves("manual"));
 ipcMain.handle("bios:import-batocera", importBatoceraBios);
 ipcMain.handle("games:import", (_event, files, systemName) => importGameFiles(files, systemName));
@@ -2206,6 +1914,8 @@ ipcMain.handle("config:save", async (_event, nextConfig) => {
   const current = normalizeConfig(await readJson(configPath, createDefaultConfig()));
   const next = normalizeConfig({ ...current, ...nextConfig });
   await writeJson(configPath, serializeConfig(next));
+  await ensureConfiguredFolders(next);
+  await scanLibrary();
   return getState();
 });
 

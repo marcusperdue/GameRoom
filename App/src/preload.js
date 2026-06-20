@@ -23,11 +23,19 @@ contextBridge.exposeInMainWorld("gameRoom", {
   importGames: (files, systemName) => ipcRenderer.invoke("games:import", files, systemName),
   pickImportGames: (systemName) => ipcRenderer.invoke("games:pick-import", systemName),
   launchGame: (gameId) => ipcRenderer.invoke("game:launch", gameId),
+  onGameEnded: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("game:ended", listener);
+    return () => ipcRenderer.removeListener("game:ended", listener);
+  },
   openEmulator: (systemName) => ipcRenderer.invoke("emulator:open", systemName),
   openEmulatorDownload: (systemName) => ipcRenderer.invoke("emulator:open-download", systemName),
+  chooseEmulator: (systemName) => ipcRenderer.invoke("emulator:choose", systemName),
+  scanEmulators: () => ipcRenderer.invoke("emulators:scan"),
   snapshotSaves: () => ipcRenderer.invoke("saves:snapshot"),
   importBatoceraBios: () => ipcRenderer.invoke("bios:import-batocera"),
   chooseFolder: (target) => ipcRenderer.invoke("folder:open", target),
   revealFolder: (target) => ipcRenderer.invoke("folder:reveal", target),
-  saveConfig: (config) => ipcRenderer.invoke("config:save", config)
+  saveConfig: (config) => ipcRenderer.invoke("config:save", config),
+  resetSetup: () => ipcRenderer.invoke("setup:reset")
 });

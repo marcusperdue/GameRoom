@@ -12,6 +12,12 @@ GameRoom does not include games, ROMs, disc images, BIOS files, firmware files, 
 
 You must provide your own legally dumped games and system files. Do not distribute copyrighted games or BIOS files with this project.
 
+## Screenshots
+
+![GameRoom library grid](docs/assets/gameroom-library.svg)
+
+![GameRoom setup wizard](docs/assets/gameroom-setup.svg)
+
 ## Supported Systems
 
 | System | Default emulator | Notes |
@@ -27,6 +33,7 @@ You must provide your own legally dumped games and system files. Do not distribu
 ## Features
 
 - Scans your library folders and groups games by console.
+- Provides a first-run setup wizard for folders, emulators, BIOS guidance, and first game import.
 - Imports games by drag and drop or file picker.
 - Launches games in the configured emulator.
 - Keeps saves and backups in predictable folders.
@@ -35,6 +42,7 @@ You must provide your own legally dumped games and system files. Do not distribu
 - Provides a Controller Center for USB and Bluetooth gamepads.
 - Stores per-console control notes and setup state.
 - Searches Internet Archive for cover art and supports manually saved image URLs.
+- Saves artwork locally in `Covers/` with source sidecar files for offline use.
 - Keeps user content out of git so the app can stay open source safely.
 
 ## Quick Start
@@ -62,6 +70,8 @@ Launch GameRoom.command
 ```
 
 If macOS blocks the command file, right-click it, choose Open, then approve it once.
+
+On first launch, use the setup wizard to choose folders, find emulator apps, review BIOS requirements, and import the first game.
 
 ## Folder Layout
 
@@ -170,6 +180,8 @@ The Artwork Center can search Internet Archive and can open Google Images for ma
 
 You can also paste a direct image URL and save it as the selected game's cover.
 
+Saved covers are downloaded into `Covers/[Console]/`, and GameRoom writes `.source.json` and `.source.url` sidecar files next to the image so the cover still works offline.
+
 ## Saves And Backups
 
 GameRoom keeps save-related files under:
@@ -198,6 +210,7 @@ From `App/`:
 
 ```bash
 npm run check
+npm test
 npm run scan
 npm run init
 ```
@@ -213,6 +226,8 @@ npm run dist:mac
 npm run dist:linux
 npm run dist:win
 ```
+
+`npm run dist:mac` builds the universal Mac DMG/ZIP used by the main Download for Mac button. Use `npm run dist:mac:split` if you need separate Apple Silicon and Intel artifacts.
 
 Build output goes to:
 

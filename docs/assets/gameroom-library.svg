@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-label="GameRoom library screen">
+  <rect width="1200" height="760" fill="#05090c"/>
+  <rect x="0" y="0" width="250" height="760" fill="#071015"/>
+  <rect x="250" y="0" width="720" height="760" fill="#061013"/>
+  <rect x="970" y="0" width="230" height="760" fill="#0c1319"/>
+  <text x="32" y="52" fill="#f7f8f3" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="800">GameRoom</text>
+  <rect x="28" y="88" width="194" height="44" rx="9" fill="#111b22" stroke="#26343d"/>
+  <text x="52" y="116" fill="#aab6c1" font-family="Inter,Arial,sans-serif" font-size="16">Search games</text>
+  <text x="28" y="176" fill="#aab6c1" font-family="Inter,Arial,sans-serif" font-size="13" font-weight="800">CONSOLES</text>
+  <g font-family="Inter,Arial,sans-serif" font-size="18" font-weight="800">
+    <rect x="28" y="204" width="194" height="52" rx="10" fill="#123822" stroke="#35e88a"/>
+    <text x="62" y="237" fill="#f7f8f3">All Games</text>
+    <rect x="172" y="218" width="34" height="26" rx="10" fill="#233039"/><text x="183" y="237" fill="#aab6c1">10</text>
+    <text x="62" y="304" fill="#f7f8f3">GameCube</text>
+    <text x="62" y="370" fill="#f7f8f3">PlayStation 2</text>
+    <text x="62" y="436" fill="#f7f8f3">Xbox</text>
+    <text x="62" y="502" fill="#f7f8f3">Nintendo DS</text>
+  </g>
+  <text x="294" y="72" fill="#35e88a" font-family="Inter,Arial,sans-serif" font-size="16" font-weight="900">CONTINUE PLAYING</text>
+  <text x="294" y="126" fill="#f7f8f3" font-family="Inter,Arial,sans-serif" font-size="50" font-weight="900">All Games</text>
+  <g font-family="Inter,Arial,sans-serif" font-weight="800" font-size="18">
+    <rect x="622" y="58" width="128" height="52" rx="10" fill="#151f26" stroke="#2c3a43"/><text x="652" y="91" fill="#f7f8f3">Add Games</text>
+    <rect x="770" y="58" width="140" height="52" rx="10" fill="#151f26" stroke="#2c3a43"/><text x="798" y="91" fill="#f7f8f3">Scan Library</text>
+  </g>
+  <text x="294" y="212" fill="#f7f8f3" font-family="Inter,Arial,sans-serif" font-size="26" font-weight="900">Browse Games</text>
+  <rect x="294" y="238" width="620" height="48" rx="10" fill="#101920" stroke="#26343d"/>
+  <text x="326" y="269" fill="#aab6c1" font-family="Inter,Arial,sans-serif" font-size="18">Search all games</text>
+  <g font-family="Inter,Arial,sans-serif" font-size="18" font-weight="800">
+    <rect x="294" y="306" width="92" height="44" rx="10" fill="#123822" stroke="#35e88a"/><text x="322" y="334" fill="#35e88a">All</text>
+    <rect x="398" y="306" width="126" height="44" rx="10" fill="#151f26" stroke="#2c3a43"/><text x="420" y="334" fill="#f7f8f3">Favorites</text>
+    <rect x="536" y="306" width="138" height="44" rx="10" fill="#151f26" stroke="#2c3a43"/><text x="558" y="334" fill="#f7f8f3">GameCube</text>
+    <rect x="686" y="306" width="98" height="44" rx="10" fill="#151f26" stroke="#2c3a43"/><text x="714" y="334" fill="#f7f8f3">PS2</text>
+  </g>
+  <g transform="translate(294 388)" font-family="Inter,Arial,sans-serif">
+    <g>
+      <rect width="130" height="240" rx="12" fill="#141d24" stroke="#2c3a43"/>
+      <rect x="14" y="14" width="102" height="136" rx="8" fill="#1e2b36"/>
+      <rect x="28" y="26" width="74" height="104" rx="4" fill="#334a63"/>
+      <text x="16" y="178" fill="#f7f8f3" font-size="18" font-weight="900">Lost Kingdoms</text>
+      <text x="16" y="202" fill="#aab6c1" font-size="14">GameCube · ISO</text>
+      <rect x="16" y="214" width="98" height="42" rx="9" fill="#172229" stroke="#33424c"/>
+      <text x="48" y="241" fill="#f7f8f3" font-size="18" font-weight="900">Play</text>
+    </g>
+    <g transform="translate(152 0)">
+      <rect width="130" height="240" rx="12" fill="#141d24" stroke="#2c3a43"/>
+      <rect x="14" y="14" width="102" height="136" rx="8" fill="#18364a"/>
+      <text x="16" y="178" fill="#f7f8f3" font-size="18" font-weight="900">Rune II</text>
+      <text x="16" y="202" fill="#aab6c1" font-size="14">GameCube · ISO</text>
+      <rect x="16" y="214" width="98" height="42" rx="9" fill="#172229" stroke="#33424c"/>
+      <text x="48" y="241" fill="#f7f8f3" font-size="18" font-weight="900">Play</text>
+    </g>
+    <g transform="translate(304 0)">
+      <rect width="130" height="240" rx="12" fill="#141d24" stroke="#2c3a43"/>
+      <rect x="14" y="14" width="102" height="136" rx="8" fill="#101920" stroke="#33424c"/>
+      <text x="48" y="91" fill="#f7f8f3" font-size="28" font-weight="900">FFI</text>
+      <text x="16" y="178" fill="#f7f8f3" font-size="18" font-weight="900">Final Fantasy</text>
+      <text x="16" y="202" fill="#aab6c1" font-size="14">Nintendo DS</text>
+      <rect x="16" y="214" width="98" height="42" rx="9" fill="#172229" stroke="#33424c"/>
+      <text x="48" y="241" fill="#f7f8f3" font-size="18" font-weight="900">Play</text>
+    </g>
+  </g>
+  <rect x="1004" y="36" width="160" height="184" rx="12" fill="#1a2530"/>
+  <rect x="1022" y="54" width="124" height="132" rx="8" fill="#334a63"/>
+  <text x="1004" y="270" fill="#35e88a" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="900">GAMECUBE</text>
+  <text x="1004" y="318" fill="#f7f8f3" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="900">Lost Kingdoms</text>
+  <rect x="1004" y="360" width="160" height="54" rx="10" fill="#65d994"/>
+  <text x="1052" y="394" fill="#06120c" font-family="Inter,Arial,sans-serif" font-size="20" font-weight="900">Play Game</text>
+</svg>

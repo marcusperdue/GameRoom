@@ -14,6 +14,8 @@
 !/App/package-lock.json
 !/App/src/
 !/App/src/**
+!/App/tests/
+!/App/tests/*.test.js
 !/App/scripts/
 !/App/scripts/*.js
 !/App/build/

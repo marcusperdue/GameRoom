@@ -91,7 +91,7 @@ p {
 
 .sidebar {
   display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 18px;
   height: 100vh;
   max-height: 100vh;
@@ -99,6 +99,7 @@ p {
   padding: 20px 18px;
   border-right: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 44%), var(--sidebar);
+  overflow: hidden;
 }
 
 .brand,
@@ -138,6 +139,10 @@ p {
 }
 
 .brand h1 {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 26px;
   line-height: 1;
 }
@@ -287,7 +292,7 @@ input {
 
 .quick-dock {
   display: grid;
-  align-content: end;
+  align-content: start;
   gap: 6px;
   min-height: 0;
   padding-top: 10px;
@@ -297,11 +302,18 @@ input {
 .quick-dock button {
   gap: 10px;
   min-height: 38px;
+  min-width: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
   font-weight: 750;
   text-align: left;
+}
+
+.quick-dock button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quick-dock span,
@@ -412,6 +424,14 @@ button.is-loading .button-spinner {
   min-width: 0;
 }
 
+.topbar > div,
+.library-head > div,
+.brand > div,
+.hero-copy,
+.detail-copy {
+  min-width: 0;
+}
+
 .eyebrow {
   color: var(--green);
   font-size: 12px;
@@ -421,6 +441,8 @@ button.is-loading .button-spinner {
 }
 
 .topbar h2 {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   margin-top: 4px;
   font-size: 30px;
   line-height: 1;
@@ -2173,6 +2195,7 @@ body {
   grid-template-rows: minmax(0, 1fr) auto;
   min-height: 100%;
   padding: 34px 30px 22px;
+  overflow: hidden;
 }
 
 .hero-copy {
@@ -2194,6 +2217,12 @@ body {
 }
 
 .hero-copy h2 {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   margin-top: 2px;
   font-size: clamp(32px, 3vw, 42px);
 }
@@ -2231,6 +2260,11 @@ body {
 
 .hero-stats span {
   flex: 0 0 auto;
+  min-width: 0;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 13px;
 }
 
@@ -2408,6 +2442,11 @@ body {
 }
 
 .detail-copy h2 {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: 27px;
 }
 
@@ -2472,17 +2511,94 @@ body {
   font-size: 24px;
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 1180px) {
   .shell {
-    grid-template-columns: 220px minmax(0, 1fr) 300px;
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+
+  .detail-rail {
+    display: none;
+  }
+
+  .sidebar {
+    gap: 14px;
+    padding: 18px 16px;
+  }
+
+  .stage {
+    padding: 26px 24px 22px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .hero-copy {
+    width: min(540px, 88%);
   }
 
   .actions button {
     padding: 0 10px;
   }
 
+  .search-box kbd {
+    display: none;
+  }
+
   .game-card {
     flex-basis: 120px;
+  }
+}
+
+@media (max-height: 760px) and (min-width: 921px) {
+  .sidebar {
+    gap: 12px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .brand-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+  }
+
+  .brand h1 {
+    font-size: 20px;
+  }
+
+  .brand p {
+    font-size: 12px;
+  }
+
+  .search-box {
+    min-height: 40px;
+  }
+
+  .system-nav {
+    gap: 5px;
+  }
+
+  .system-card {
+    min-height: 38px;
+  }
+
+  .quick-dock {
+    gap: 4px;
+    padding-top: 8px;
+  }
+
+  .quick-dock button {
+    min-height: 34px;
+  }
+
+  .quick-dock button:last-child {
+    margin-top: 3px;
   }
 }
 
@@ -2524,6 +2640,7 @@ body {
   }
 
   .detail-rail {
+    display: block;
     padding: 0 24px 24px;
   }
 

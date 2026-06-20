@@ -24,6 +24,7 @@
     "dist:all": "npm run dist:mac && npm run dist:linux && npm run dist:win"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.5.0",
     "electron": "^33.3.1",
     "electron-builder": "^26.15.3"
   },
@@ -32,6 +33,7 @@
     "productName": "GameRoom",
     "icon": "src/assets/icon.png",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "afterSign": "scripts/notarize-mac.js",
     "directories": {
       "output": "../Downloads/Updates/builds"
     },
@@ -41,6 +43,10 @@
     ],
     "mac": {
       "icon": "src/assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "target": [
         "dmg",
         "zip"

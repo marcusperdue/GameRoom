@@ -222,6 +222,37 @@ Downloads/Updates/builds/
 
 Platform builds usually need to be run on that platform. For example, build the Windows installer on Windows.
 
+### macOS Signing And Notarization
+
+Unsigned macOS downloads can show "GameRoom is damaged and can't be opened" because Gatekeeper blocks quarantined apps that are not signed and notarized.
+
+For local testing, move the app to Applications and clear the quarantine flag:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/GameRoom.app
+```
+
+For public macOS releases, install a valid Apple Developer ID Application certificate and provide notarization credentials through environment variables before running `npm run dist:mac`.
+
+Supported notarization options:
+
+```bash
+# Keychain profile, recommended for local release machines
+APPLE_NOTARIZE_KEYCHAIN_PROFILE=gameroom-notary
+
+# App Store Connect API key
+APPLE_API_KEY=/absolute/path/AuthKey_XXXXXXXXXX.p8
+APPLE_API_KEY_ID=XXXXXXXXXX
+APPLE_API_ISSUER=00000000-0000-0000-0000-000000000000
+
+# Apple ID app-specific password
+APPLE_ID=you@example.com
+APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx
+APPLE_TEAM_ID=XXXXXXXXXX
+```
+
+Do not commit certificates, API keys, app-specific passwords, or Apple account details.
+
 ## Project Status
 
 GameRoom is an early open-source app. The core goal is a polished, minimal launcher that makes emulator setup easier without hiding the fact that users still need their own games, BIOS files, and emulator installs.

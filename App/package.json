@@ -19,7 +19,7 @@
     "scan": "node ../Scripts/scan-library.mjs",
     "init": "node ../Scripts/init-folders.mjs",
     "pack": "electron-builder --dir",
-    "dist:mac": "electron-builder --mac dmg zip --universal",
+    "dist:mac": "electron-builder --mac dmg zip --arm64",
     "dist:mac:split": "electron-builder --mac dmg zip --arm64 --x64",
     "dist:linux": "electron-builder --linux AppImage tar.gz --arm64 --x64",
     "dist:win": "electron-builder --win nsis zip --arm64 --x64",

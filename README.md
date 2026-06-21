@@ -12,12 +12,6 @@ GameRoom does not include games, ROMs, disc images, BIOS files, firmware files, 
 
 You must provide your own legally dumped games and system files. Do not distribute copyrighted games or BIOS files with this project.
 
-## Screenshots
-
-![GameRoom library grid](docs/assets/gameroom-library.svg)
-
-![GameRoom setup wizard](docs/assets/gameroom-setup.svg)
-
 ## Supported Systems
 
 | System | Default emulator | Notes |
@@ -227,7 +221,7 @@ npm run dist:linux
 npm run dist:win
 ```
 
-`npm run dist:mac` builds the universal Mac DMG/ZIP used by the main Download for Mac button. Use `npm run dist:mac:split` if you need separate Apple Silicon and Intel artifacts.
+`npm run dist:mac` builds the Apple Silicon Mac DMG/ZIP used by the Download for Mac button. Use `npm run dist:mac:split` if you need separate Apple Silicon and Intel artifacts.
 
 Build output goes to:
 

@@ -12,6 +12,10 @@ GameRoom does not include games, ROMs, disc images, BIOS files, firmware files, 
 
 You must provide your own legally dumped games and system files. Do not distribute copyrighted games or BIOS files with this project.
 
+## Screenshot
+
+![GameRoom library view](docs/assets/gameroom-library.png)
+
 ## Supported Systems
 
 | System | Default emulator | Notes |
